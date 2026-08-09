@@ -13,6 +13,14 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
+    // Declared explicitly rather than relying on bare baseUrl resolution: the
+    // Vercel bundler resolves "paths" but not baseUrl-relative specifiers, so
+    // imports like 'src/common/guards/...' failed at runtime with
+    // "Cannot find module" on every route.
+    "paths": {
+      "src/*": ["src/*"],
+      "generated/*": ["generated/*"]
+    },
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
