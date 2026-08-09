@@ -3,9 +3,21 @@ import { randomUUID } from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
+import { put, del } from '@vercel/blob';
 
 @Injectable()
 export class FileUploadService {
+  /**
+   * Serverless filesystems are read-only and ephemeral, so uploads go to
+   * Vercel Blob whenever a store is configured (BLOB_READ_WRITE_TOKEN is
+   * injected automatically by Vercel). Without it — local development — files
+   * are written to ./uploads and served from /uploads/ as before.
+   */
+  private readonly blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+  private get usesBlobStorage(): boolean {
+    return Boolean(this.blobToken);
+  }
+
   private readonly uploadsDir: string;
   private readonly maxFileSize = 5 * 1024 * 1024; // 5MB
   private readonly allowedMimeTypes = [
@@ -30,7 +42,9 @@ export class FileUploadService {
 
   constructor() {
     this.uploadsDir = path.join(process.cwd(), 'uploads');
-    this.ensureUploadsDirSync();
+    if (!this.usesBlobStorage) {
+      this.ensureUploadsDirSync();
+    }
   }
 
   private ensureUploadsDirSync() {
@@ -132,12 +146,30 @@ export class FileUploadService {
     return this.saveFile(file, 'topups');
   }
 
+  /**
+   * Returns an absolute URL when using blob storage, or a `/uploads/...` path
+   * when writing locally. Both are stored as-is; the app resolves a relative
+   * path against the API origin and passes an absolute URL straight through.
+   */
   private async saveFile(
     file: Express.Multer.File,
     subDir: string,
   ): Promise<string> {
     const ext = path.extname(file.originalname) || '.jpg';
     const filename = `${randomUUID()}${ext}`;
+
+    if (this.usesBlobStorage) {
+      const blob = await put(`${subDir}/${filename}`, file.buffer, {
+        access: 'public',
+        contentType: file.mimetype,
+        token: this.blobToken,
+        // The filename is already a UUID; a second random suffix would only
+        // make the stored path differ from the one we return.
+        addRandomSuffix: false,
+      });
+      return blob.url;
+    }
+
     const dir = path.join(this.uploadsDir, subDir);
     const filePath = path.join(dir, filename);
 
@@ -147,7 +179,19 @@ export class FileUploadService {
   }
 
   async deleteFile(fileUrl: string): Promise<void> {
-    if (!fileUrl || !fileUrl.startsWith('/uploads/')) {
+    if (!fileUrl) return;
+
+    if (/^https?:\/\//.test(fileUrl)) {
+      try {
+        await del(fileUrl, { token: this.blobToken });
+      } catch {
+        // Already gone, or stored before blob storage was configured — the
+        // caller only cares that it is no longer referenced.
+      }
+      return;
+    }
+
+    if (!fileUrl.startsWith('/uploads/')) {
       return;
     }
 
