@@ -3,7 +3,7 @@
   "outputDirectory": "public",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "functions": {
-    "api/index.ts": {
+    "api/index.js": {
       "includeFiles": "generated/prisma/**"
     }
   }
