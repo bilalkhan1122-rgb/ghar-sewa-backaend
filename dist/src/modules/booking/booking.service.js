@@ -263,6 +263,7 @@ let BookingService = class BookingService {
         if (booking.status !== client_1.BookingStatus.COMPLETED) {
             throw new common_1.BadRequestException(`Booking is in ${booking.status.toLowerCase()} status`);
         }
+        await this.wallet.processJobPayment(bookingId);
         await this.prisma.booking.update({
             where: { id: bookingId },
             data: { confirmedAt: new Date() },
@@ -274,7 +275,6 @@ let BookingService = class BookingService {
             jobId: booking.jobId,
             customerId,
         });
-        await this.wallet.processJobPayment(bookingId);
         void this.notifications.send({
             userId: booking.providerId,
             type: client_1.NotificationType.COMPLETION_CONFIRMED,

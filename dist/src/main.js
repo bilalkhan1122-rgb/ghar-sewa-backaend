@@ -112,7 +112,10 @@ async function bootstrap() {
     const logger = app.get(nestjs_pino_1.Logger);
     app.useGlobalInterceptors(new response_interceptor_1.ResponseInterceptor());
     app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter(logger));
+    const server = app.getHttpServer();
     await app.listen(port || 8080);
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 66000;
     logger.log(`🚀 Application is running on: http://localhost:${port || 8080}/api/v1`, 'Bootstrap');
     logger.log(`📖 Swagger docs available at: http://localhost:${port || 8080}/docs`, 'Bootstrap');
 }

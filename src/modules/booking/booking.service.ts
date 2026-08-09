@@ -354,6 +354,14 @@ export class BookingService {
       );
     }
 
+    // Process the job payment first (Module 14): debits the customer wallet,
+    // credits the provider (net of commission) and records the platform
+    // commission — all atomically. Duplicate payments are impossible. Only
+    // once money has actually moved do we record the confirmation below —
+    // otherwise a failure here (e.g. insufficient balance) would leave the
+    // booking looking confirmed while no payment ever went through.
+    await this.wallet.processJobPayment(bookingId);
+
     // Record confirmation timestamp (anchors the 48h dispute window)
     await this.prisma.booking.update({
       where: { id: bookingId },
@@ -373,11 +381,6 @@ export class BookingService {
       jobId: booking.jobId,
       customerId,
     });
-
-    // Process the job payment (Module 14): debits the customer wallet,
-    // credits the provider (net of commission) and records the platform
-    // commission — all atomically. Duplicate payments are impossible.
-    await this.wallet.processJobPayment(bookingId);
 
     // Notify the provider that completion was confirmed
     void this.notifications.send({

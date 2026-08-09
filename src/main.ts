@@ -144,7 +144,16 @@ async function bootstrap() {
   // Global exception filter for standard error responses
   app.useGlobalFilters(new HttpExceptionFilter(logger));
 
+  const server = app.getHttpServer();
   await app.listen(port || 8080);
+
+  // Android's OkHttp (used by React Native's fetch) pools keep-alive connections for
+  // minutes, but Node's HTTP server default keepAliveTimeout is only 5s — a client can
+  // try to reuse a connection the server already closed, which surfaces to fetch() as a
+  // bare network failure with nothing logged server-side. Match the server's timeout to
+  // safely outlast realistic client-side idle gaps (headersTimeout must exceed it).
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 
   logger.log(
     `🚀 Application is running on: http://localhost:${port || 8080}/api/v1`,
