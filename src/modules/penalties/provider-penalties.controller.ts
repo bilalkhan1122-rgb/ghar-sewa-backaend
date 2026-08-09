@@ -79,6 +79,7 @@ export class ProviderPenaltiesController {
           new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
           new FileTypeValidator({
             fileType: /(jpg|jpeg|png|webp|gif|mp4|webm|mov|pdf)$/,
+            fallbackToMimetype: true,
           }),
         ],
         fileIsRequired: false,

@@ -102,6 +102,7 @@ export class CustomerWalletController {
           new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
           new FileTypeValidator({
             fileType: /(jpg|jpeg|png|webp|gif|pdf)$/,
+            fallbackToMimetype: true,
           }),
         ],
         fileIsRequired: false,

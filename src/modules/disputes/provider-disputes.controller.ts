@@ -78,6 +78,7 @@ export class ProviderDisputesController {
           new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
           new FileTypeValidator({
             fileType: /(jpg|jpeg|png|webp|gif|mp4|webm|mov|pdf)$/,
+            fallbackToMimetype: true,
           }),
         ],
       }),
