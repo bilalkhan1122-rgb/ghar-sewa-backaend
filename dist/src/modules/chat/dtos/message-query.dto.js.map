@@ -1,0 +1,1 @@
+{"version":3,"file":"message-query.dto.js","sourceRoot":"","sources":["../../../../../src/modules/chat/dtos/message-query.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,qDAAuD;AACvD,6CAAsD;AACtD,wEAA+D;AAE/D,MAAa,eAAgB,SAAQ,8BAAa;IAOhD,MAAM,CAAU;CACjB;AARD,0CAQC;AADC;IANC,IAAA,6BAAmB,EAAC;QACnB,WAAW,EACT,wEAAwE;KAC3E,CAAC;IACD,IAAA,4BAAU,GAAE;IACZ,IAAA,0BAAQ,GAAE;;+CACK"}

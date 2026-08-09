@@ -1,0 +1,1080 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider      = "prisma-client"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+
+  @@map("user_status")
+}
+
+enum VerificationStatus {
+  INCOMPLETE
+  PENDING
+  APPROVED
+  REJECTED
+  BANNED
+
+  @@map("verification_status")
+}
+
+enum BidStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+
+  @@map("bid_status")
+}
+
+enum BookingType {
+  DIRECT
+  BID
+
+  @@map("booking_type")
+}
+
+enum BookingStatus {
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+
+  @@map("booking_status")
+}
+
+enum JobStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  DISPUTED
+
+  @@map("job_status")
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("review_status")
+}
+
+enum RatingFlagStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+
+  @@map("rating_flag_status")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  LOCATION
+
+  @@map("message_type")
+}
+
+enum NotificationType {
+  WELCOME
+  NEW_JOB
+  JOB_ACCEPTED
+  NEW_BID
+  BID_ACCEPTED
+  BID_REJECTED
+  BOOKING_CONFIRMED
+  JOB_STARTED
+  JOB_COMPLETED
+  COMPLETION_CONFIRMED
+  JOB_CANCELLED
+  JOB_EXPIRED
+  REVIEW_RECEIVED
+  VERIFICATION_SUBMITTED
+  VERIFICATION_RESUBMITTED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  VERIFICATION_BANNED
+  VERIFICATION_UNBANNED
+  WALLET_UPDATED
+  WITHDRAWAL_PROCESSED
+  DISPUTE_RAISED
+  DISPUTE_RESPONSE_RECEIVED
+  DISPUTE_STATUS_UPDATED
+  DISPUTE_RESOLVED
+  DISPUTE_REJECTED
+  PENALTY_WARNING
+  PENALTY_SUSPENSION_STARTED
+  PENALTY_SUSPENSION_ENDED
+  PENALTY_PERMANENT_BAN
+  APPEAL_APPROVED
+  APPEAL_REJECTED
+  WALLET_TOPUP_SUBMITTED
+  WALLET_TOPUP_APPROVED
+  WALLET_TOPUP_REJECTED
+  JOB_PAYMENT_COMPLETED
+  REFUND_RECEIVED
+  WITHDRAWAL_REQUEST_SUBMITTED
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_PROCESSING
+  WITHDRAWAL_COMPLETED
+  WITHDRAWAL_REJECTED
+  WITHDRAWAL_CANCELLED
+  SYSTEM_ANNOUNCEMENT
+
+  @@map("notification_type")
+}
+
+enum NotificationCategory {
+  JOB
+  BID
+  BOOKING
+  REVIEW
+  VERIFICATION
+  WALLET
+  DISPUTE
+  PENALTY
+  SYSTEM
+  MARKETING
+
+  @@map("notification_category")
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+
+  @@map("notification_delivery_status")
+}
+
+enum CancellationType {
+  CUSTOMER
+  PROVIDER
+  SYSTEM
+
+  @@map("cancellation_type")
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  WAITING_FOR_RESPONSE
+  RESOLVED
+  REJECTED
+
+  @@map("dispute_status")
+}
+
+enum DisputeResolution {
+  FULL_REFUND
+  PARTIAL_REFUND
+  REDO_WORK
+  NO_REFUND
+
+  @@map("dispute_resolution")
+}
+
+enum DisputeEvidenceType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+
+  @@map("dispute_evidence_type")
+}
+
+enum PenaltyType {
+  WARNING
+  TEMPORARY_BAN
+  PERMANENT_BAN
+
+  @@map("penalty_type")
+}
+
+enum AppealStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("appeal_status")
+}
+
+// ─── Module 17: Admin Dashboard ───────────────────────────────────────
+
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR
+  FINANCE_ADMIN
+  SUPPORT_AGENT
+
+  @@map("admin_role")
+}
+
+// ─── Module 14: Wallet System ──────────────────────────────────────────
+
+enum WalletType {
+  CUSTOMER
+  PROVIDER
+
+  @@map("wallet_type")
+}
+
+enum WalletStatus {
+  ACTIVE
+  FROZEN
+  SUSPENDED
+
+  @@map("wallet_status")
+}
+
+enum WalletTransactionType {
+  TOP_UP
+  JOB_PAYMENT
+  PROVIDER_EARNING
+  PLATFORM_COMMISSION
+  REFUND
+  WITHDRAWAL_REQUEST
+  WITHDRAWAL_COMPLETED
+  WITHDRAWAL_REJECTED
+  ADJUSTMENT
+
+  @@map("wallet_transaction_type")
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+
+  @@map("wallet_transaction_status")
+}
+
+enum TopUpStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("top_up_status")
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+
+  @@map("withdrawal_status")
+}
+
+enum PaymentMethod {
+  JAZZCASH
+  EASYPAISA
+  BANK_TRANSFER
+  CASH
+  OTHER
+
+  @@map("payment_method")
+}
+
+// Tables
+model City {
+  id        String   @id @default(uuid())
+  name      String   @db.VarChar(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+
+  @@map("cities")
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  fullName           String             @db.VarChar(100)
+  phone              String             @unique @db.VarChar(20)
+  email              String             @unique @db.VarChar(100)
+  passwordHash       String             @db.Text
+  role               UserRole           @default(CUSTOMER)
+  cityId             String
+  address            String?            @db.VarChar(500)
+  status             UserStatus         @default(ACTIVE)
+  profileCompleted   Boolean            @default(true)
+  verificationStatus VerificationStatus @default(APPROVED)
+
+  refreshToken String? @db.Text // Legacy field - kept for backward compatibility
+  isActive     Boolean  @default(true) // for soft delete
+
+  // Customer & Provider shared fields
+  profilePhoto  String?  @db.VarChar(500)
+  walletBalance Decimal  @default(0) @db.Decimal(10, 2)
+  totalSpent    Decimal  @default(0) @db.Decimal(10, 2)
+  totalTopups   Decimal  @default(0) @db.Decimal(10, 2)
+  deletedAt     DateTime?
+
+  // Relations
+  city          City            @relation(fields: [cityId], references: [id])
+  refreshTokens RefreshToken[]
+  providerProfile ProviderProfile?
+  customerBookings  Booking[]  @relation("CustomerBookings")
+  providerBookings  Booking[]  @relation("ProviderBookings")
+  customerJobs      Job[]      @relation("CustomerJobs")
+  providerBids      Bid[]      @relation("ProviderBids")
+  reviewsWritten    Review[]   @relation("ReviewerReviews")
+  reviewsReceived   Review[]   @relation("RevieweeReviews")
+  customerReviews   Review[]   @relation("CustomerReviews")
+  providerReviews   Review[]   @relation("ProviderReviews")
+  ratingSummary     RatingSummary?
+  ratingFlags       RatingFlag[] @relation("ProviderRatingFlags")
+  customerConversations Conversation[] @relation("CustomerConversations")
+  providerConversations Conversation[] @relation("ProviderConversations")
+  sentMessages      Message[]   @relation("SentMessages")
+  notifications     Notification[]
+  devices           DeviceRegistration[]
+  notificationPreference NotificationPreference?
+  verificationRequests VerificationRequest[] @relation("ProviderVerificationRequests")
+  disputesRaised   Dispute[]        @relation("RaisedDisputes")
+  disputesOpposed  Dispute[]        @relation("OpposedDisputes")
+  disputeEvidences DisputeEvidence[] @relation("DisputeEvidenceUploads")
+  disputeTimelines DisputeTimeline[] @relation("DisputeTimelineActors")
+  penalties        ProviderPenalty[] @relation("ProviderPenalties")
+  appeals          Appeal[]         @relation("ProviderAppeals")
+  wallet           Wallet?
+  topUpRequests    TopUpRequest[]
+  withdrawalRequests WithdrawalRequest[] @relation("ProviderWithdrawals")
+  admin            Admin?
+  adminAuditLogs   AdminAuditLog[] @relation("AdminAuditLogs")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @db.Text
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deviceInfo String? @db.VarChar(255) // Browser/device identifier
+  ipAddress  String? @db.VarChar(45)  // IPv4 or IPv6
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model ServiceCategory {
+  id           String   @id @default(uuid())
+  name         String   @db.VarChar(100)
+  slug         String   @unique @db.VarChar(100)
+  description  String?  @db.VarChar(500)
+  icon         String?  @db.VarChar(255)
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  providers   ProviderServiceCategory[]
+  jobs        Job[]
+
+  @@index([slug])
+  @@index([isActive, displayOrder])
+  @@map("service_categories")
+}
+
+model ProviderProfile {
+  userId         String    @id
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio            String?   @db.VarChar(1000)
+  hourlyRate     Decimal?  @db.Decimal(10, 2)
+  serviceRadius  Int?
+  serviceLocation String?  @db.VarChar(500)
+  facePhoto      String?   @db.VarChar(500)
+  cnicNumber     String?   @unique @db.VarChar(20)
+  cnicFrontImage String?   @db.VarChar(500)
+  cnicBackImage  String?   @db.VarChar(500)
+
+  categories    ProviderServiceCategory[]
+  galleryImages GalleryImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("provider_profiles")
+}
+
+model ProviderServiceCategory {
+  providerId String
+  categoryId String
+
+  provider ProviderProfile  @relation(fields: [providerId], references: [userId], onDelete: Cascade)
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([providerId, categoryId])
+  @@map("provider_service_categories")
+}
+
+model GalleryImage {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   ProviderProfile @relation(fields: [providerId], references: [userId], onDelete: Cascade)
+  imageUrl   String   @db.VarChar(500)
+  createdAt  DateTime @default(now())
+
+  @@map("gallery_images")
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  jobId       String
+  customerId  String
+  providerId  String
+  status      BookingStatus @default(ACCEPTED)
+  bookingType BookingType   @default(DIRECT)
+  totalAmount Decimal       @default(0) @db.Decimal(10, 2)
+
+  acceptedAt  DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  confirmedAt DateTime? // customer confirmed job completion (dispute window anchor)
+  cancelledAt DateTime?
+
+  customer User @relation("CustomerBookings", fields: [customerId], references: [id])
+  provider User @relation("ProviderBookings", fields: [providerId], references: [id])
+  job      Job  @relation(fields: [jobId], references: [id])
+
+  cancellationRecords CancellationRecord[]
+  reviews      Review[]
+  conversations Conversation[]
+  disputes     Dispute[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([jobId])
+  @@index([status])
+  @@map("bookings")
+}
+
+model Job {
+  id              String    @id @default(uuid())
+  customerId      String
+  categoryId      String
+  title           String    @db.VarChar(200)
+  description     String    @db.Text
+  address         String    @db.VarChar(500)
+  latitude        Float
+  longitude       Float
+  offeredPrice    Decimal   @db.Decimal(10, 2)
+  status          JobStatus @default(PENDING)
+  expiresAt       DateTime
+  preferredSchedule DateTime?
+  additionalNotes String?   @db.VarChar(1000)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  customer  User            @relation("CustomerJobs", fields: [customerId], references: [id])
+  category  ServiceCategory @relation(fields: [categoryId], references: [id])
+  images    JobImage[]
+  bids      Bid[]
+  bookings  Booking[]
+  timeline  JobTimeline[]
+  cancellations CancellationRecord[]
+  reviews       Review[]
+  conversations Conversation[]
+  disputes      Dispute[]
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([status, categoryId, expiresAt])
+  @@map("jobs")
+}
+
+model JobImage {
+  id        String   @id @default(uuid())
+  jobId     String
+  imageUrl  String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_images")
+}
+
+model Bid {
+  id          String   @id @default(uuid())
+  jobId       String
+  providerId  String
+  offeredPrice Decimal @db.Decimal(10, 2)
+  message     String?  @db.VarChar(500)
+  status      BidStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  job      Job  @relation(fields: [jobId], references: [id])
+  provider User @relation("ProviderBids", fields: [providerId], references: [id])
+
+  @@index([jobId])
+  @@index([providerId])
+  @@index([status])
+  @@index([jobId, providerId])
+  @@map("bids")
+}
+
+model JobTimeline {
+  id          String   @id @default(uuid())
+  jobId       String
+  event       String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+
+  job Job @relation(fields: [jobId], references: [id])
+
+  @@index([jobId])
+  @@index([jobId, createdAt])
+  @@map("job_timelines")
+}
+
+model CancellationRecord {
+  id               String           @id @default(uuid())
+  jobId            String?
+  bookingId        String?
+  cancelledBy      String           @db.VarChar(50)
+  cancellationType CancellationType @default(CUSTOMER)
+  penaltyApplied   Boolean          @default(false)
+  penaltyId        String?
+  reason           String?          @db.VarChar(500)
+  createdAt        DateTime         @default(now())
+
+  job     Job?            @relation(fields: [jobId], references: [id])
+  booking Booking?        @relation(fields: [bookingId], references: [id])
+  penalty ProviderPenalty? @relation(fields: [penaltyId], references: [id])
+
+  @@index([jobId])
+  @@index([bookingId])
+  @@index([cancelledBy, createdAt])
+  @@map("cancellation_records")
+}
+
+// ─── Module 11: Provider Verification ─────────────────────────────────
+
+model VerificationRequest {
+  id              String             @id @default(uuid())
+  providerId      String
+  cnicNumber      String             @db.VarChar(20)
+  facePhoto       String             @db.VarChar(500)
+  cnicFrontImage  String             @db.VarChar(500)
+  cnicBackImage   String             @db.VarChar(500)
+  status          VerificationStatus @default(PENDING)
+  submittedAt     DateTime           @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?            @db.VarChar(500)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  provider User @relation("ProviderVerificationRequests", fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, status])
+  @@index([status])
+  @@index([providerId, submittedAt])
+  @@map("verification_requests")
+}
+
+// ─── Module 12: Dispute Resolution ───────────────────────────────────
+
+model Dispute {
+  id            String             @id @default(uuid())
+  bookingId     String
+  jobId         String
+  raisedById    String
+  opponentId    String
+  reason        String             @db.VarChar(200)
+  description   String?            @db.VarChar(2000)
+  status        DisputeStatus      @default(OPEN)
+  resolution    DisputeResolution?
+  refundAmount  Decimal?           @db.Decimal(10, 2)
+  evidenceCount Int                @default(0)
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  booking  Booking @relation(fields: [bookingId], references: [id])
+  job      Job     @relation(fields: [jobId], references: [id])
+  raisedBy User    @relation("RaisedDisputes", fields: [raisedById], references: [id])
+  opponent User    @relation("OpposedDisputes", fields: [opponentId], references: [id])
+
+  evidences DisputeEvidence[]
+  timeline  DisputeTimeline[]
+
+  @@index([bookingId])
+  @@index([jobId])
+  @@index([raisedById])
+  @@index([opponentId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("disputes")
+}
+
+model DisputeEvidence {
+  id         String             @id @default(uuid())
+  disputeId  String
+  uploaderId String
+  type       DisputeEvidenceType
+  fileUrl    String             @db.VarChar(500)
+  mimeType   String             @db.VarChar(100)
+  size       Int
+  createdAt  DateTime           @default(now())
+
+  dispute  Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  uploader User    @relation("DisputeEvidenceUploads", fields: [uploaderId], references: [id])
+
+  @@index([disputeId])
+  @@map("dispute_evidences")
+}
+
+model DisputeTimeline {
+  id          String   @id @default(uuid())
+  disputeId   String
+  actorId     String?
+  action      String   @db.VarChar(100)
+  description String?  @db.VarChar(1000)
+  createdAt   DateTime @default(now())
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  actor   User?   @relation("DisputeTimelineActors", fields: [actorId], references: [id])
+
+  @@index([disputeId, createdAt])
+  @@map("dispute_timelines")
+}
+
+// ─── Module 13: Cancellation & Penalties ─────────────────────────────
+
+model ProviderPenalty {
+  id          String      @id @default(uuid())
+  providerId  String
+  penaltyType PenaltyType
+  reason      String      @db.VarChar(500)
+  startDate   DateTime    @default(now())
+  endDate     DateTime?
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  provider      User                 @relation("ProviderPenalties", fields: [providerId], references: [id], onDelete: Cascade)
+  cancellations CancellationRecord[]
+  appeals       Appeal[]
+
+  @@index([providerId])
+  @@index([providerId, active])
+  @@index([penaltyType])
+  @@map("provider_penalties")
+}
+
+model Appeal {
+  id             String       @id @default(uuid())
+  penaltyId      String
+  providerId     String
+  explanation    String       @db.VarChar(2000)
+  supportingFile String?      @db.VarChar(500)
+  status         AppealStatus @default(PENDING)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  adminNote      String?      @db.VarChar(500)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  penalty  ProviderPenalty @relation(fields: [penaltyId], references: [id])
+  provider User            @relation("ProviderAppeals", fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([penaltyId])
+  @@index([providerId])
+  @@index([status])
+  @@map("appeals")
+}
+
+// ─── Module 8: Reviews & Ratings ───────────────────────────────────────
+
+model Review {
+  id         String       @id @default(uuid())
+  bookingId  String
+  jobId      String
+  customerId String
+  providerId String
+  reviewerId String
+  revieweeId String
+  rating     Int
+  reviewText String?      @db.VarChar(1000)
+  status     ReviewStatus @default(APPROVED)
+  deletedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  booking  Booking @relation(fields: [bookingId], references: [id])
+  job      Job     @relation(fields: [jobId], references: [id])
+  customer User    @relation("CustomerReviews", fields: [customerId], references: [id])
+  provider User    @relation("ProviderReviews", fields: [providerId], references: [id])
+  reviewer User    @relation("ReviewerReviews", fields: [reviewerId], references: [id])
+  reviewee User    @relation("RevieweeReviews", fields: [revieweeId], references: [id])
+
+  @@unique([bookingId, reviewerId])
+  @@index([revieweeId])
+  @@index([reviewerId])
+  @@index([bookingId])
+  @@index([status])
+  @@map("reviews")
+}
+
+model RatingSummary {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  averageRating Decimal  @default(0) @db.Decimal(3, 2)
+  totalReviews  Int      @default(0)
+  fiveStarCount Int      @default(0)
+  fourStarCount Int      @default(0)
+  threeStarCount Int     @default(0)
+  twoStarCount  Int      @default(0)
+  oneStarCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("rating_summaries")
+}
+
+model RatingFlag {
+  id            String          @id @default(uuid())
+  providerId    String
+  reason        String          @db.VarChar(500)
+  averageRating Decimal         @db.Decimal(3, 2)
+  status        RatingFlagStatus @default(OPEN)
+  createdAt     DateTime        @default(now())
+
+  provider User @relation("ProviderRatingFlags", fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([status])
+  @@map("rating_flags")
+}
+
+// ─── Module 9: In-App Chat ─────────────────────────────────────────────
+
+model Conversation {
+  id            String    @id @default(uuid())
+  jobId         String
+  bookingId     String?
+  customerId    String
+  providerId    String
+  lastMessage   String?   @db.VarChar(500)
+  lastMessageAt DateTime?
+  lastActivity  DateTime  @default(now())
+  customerDeletedAt DateTime?
+  providerDeletedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  job      Job      @relation(fields: [jobId], references: [id])
+  booking  Booking? @relation(fields: [bookingId], references: [id])
+  customer User     @relation("CustomerConversations", fields: [customerId], references: [id])
+  provider User     @relation("ProviderConversations", fields: [providerId], references: [id])
+  messages Message[]
+
+  @@unique([jobId, customerId, providerId])
+  @@index([customerId])
+  @@index([providerId])
+  @@index([jobId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid())
+  conversationId String
+  senderId       String
+  type           MessageType @default(TEXT)
+  content        String?     @db.Text
+  attachmentUrl  String?     @db.VarChar(500)
+  latitude       Float?
+  longitude      Float?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ─── Module 10: Push Notifications ─────────────────────────────────────
+
+model Notification {
+  id                String                    @id @default(uuid())
+  userId            String
+  type              NotificationType
+  category          NotificationCategory
+  title             String                    @db.VarChar(200)
+  message           String                    @db.Text
+  relatedEntityType String?                   @db.VarChar(100)
+  relatedEntityId   String?
+  isRead            Boolean                   @default(false)
+  deliveryStatus    NotificationDeliveryStatus @default(PENDING)
+  deliveryError     String?                   @db.VarChar(500)
+  sentAt            DateTime?
+  readAt            DateTime?
+  deliveredAt       DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime                  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model DeviceRegistration {
+  id           String    @id @default(uuid())
+  userId       String
+  deviceToken  String    @db.VarChar(500)
+  platform     String    @db.VarChar(50) // ios | android | web
+  lastActiveAt DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceToken])
+  @@index([userId])
+  @@map("device_registrations")
+}
+
+model NotificationPreference {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  jobEnabled       Boolean  @default(true)
+  chatEnabled      Boolean  @default(true)
+  bookingEnabled   Boolean  @default(true)
+  marketingEnabled Boolean  @default(false)
+  systemEnabled    Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+// ─── Module 14: Wallet System ───────────────────────────────────────────
+
+model Wallet {
+  id               String      @id @default(uuid())
+  userId           String      @unique
+  type             WalletType
+  balance          Decimal     @default(0) @db.Decimal(15, 2) // available balance
+  heldBalance      Decimal     @default(0) @db.Decimal(15, 2) // funds held for pending withdrawals
+  lifetimeCredits  Decimal     @default(0) @db.Decimal(15, 2)
+  lifetimeDebits   Decimal     @default(0) @db.Decimal(15, 2)
+  status           WalletStatus @default(ACTIVE)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  topUps       TopUpRequest[]
+  withdrawals  WithdrawalRequest[]
+  auditLogs    WalletAuditLog[]
+
+  @@index([type])
+  @@index([status])
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id            String                @id @default(uuid())
+  walletId      String
+  type          WalletTransactionType
+  amount        Decimal               @db.Decimal(15, 2) // signed: positive = credit, negative = debit
+  balanceBefore Decimal               @db.Decimal(15, 2)
+  balanceAfter  Decimal               @db.Decimal(15, 2)
+  referenceType String?               @db.VarChar(50) // BOOKING | TOP_UP | WITHDRAWAL | DISPUTE | ADJUSTMENT
+  referenceId   String?
+  // Idempotency key — unique per logical operation so completed jobs
+  // can never be paid twice even under concurrent requests.
+  processingKey String?               @unique @db.VarChar(200)
+  description   String?               @db.VarChar(500)
+  status        WalletTransactionStatus @default(COMPLETED)
+  createdAt     DateTime              @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([walletId, type])
+  @@index([referenceType, referenceId])
+  @@map("wallet_transactions")
+}
+
+// Manual top-up requests (Phase 1). Balance only changes on approval.
+model TopUpRequest {
+  id                   String       @id @default(uuid())
+  userId               String
+  walletId             String
+  amount               Decimal      @db.Decimal(15, 2)
+  paymentMethod        PaymentMethod
+  transactionReference String?      @db.VarChar(200)
+  proofImage           String?      @db.VarChar(500)
+  notes                String?      @db.VarChar(500)
+  status               TopUpStatus  @default(PENDING)
+  submittedAt          DateTime     @default(now())
+  reviewedAt           DateTime?
+  reviewedBy           String?
+  rejectionReason      String?      @db.VarChar(500)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status])
+  @@index([walletId])
+  @@map("top_up_requests")
+}
+
+// ─── Module 15: Withdrawal & Payouts ───────────────────────────────────
+
+model WithdrawalRequest {
+  id            String           @id @default(uuid())
+  providerId    String
+  walletId      String
+  amount        Decimal          @db.Decimal(15, 2)
+  paymentMethod PaymentMethod
+  accountName   String           @db.VarChar(100)
+  accountNumber String           @db.VarChar(50)
+  bankName      String?          @db.VarChar(100)
+  status        WithdrawalStatus @default(PENDING)
+  submittedAt   DateTime         @default(now())
+  processedAt   DateTime?
+  processedBy   String?
+  notes         String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  provider User   @relation("ProviderWithdrawals", fields: [providerId], references: [id], onDelete: Cascade)
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, status])
+  @@index([status])
+  @@index([walletId])
+  @@map("withdrawal_requests")
+}
+
+// Immutable audit trail for every wallet operation.
+model WalletAuditLog {
+  id              String   @id @default(uuid())
+  walletId        String
+  actorUserId     String?
+  actorAdminId    String?
+  action          String   @db.VarChar(100)
+  previousValues  Json?
+  newValues       Json?
+  referenceType   String?  @db.VarChar(50)
+  referenceId     String?
+  createdAt       DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("wallet_audit_logs")
+}
+
+// ─── Module 17: Admin Dashboard ───────────────────────────────────────
+
+/**
+ * Admin identity record. `permissions` is a future-ready permission list
+ * (empty array = full access / SUPER_ADMIN). Designed so roles such as
+ * Moderator, Finance Admin and Support Agent can be added without major
+ * refactoring.
+ */
+model Admin {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  role        AdminRole @default(SUPER_ADMIN)
+  permissions String[]  @default([]) // empty = full access; future: granular
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+/** Immutable audit trail for every admin action. Never editable/deletable. */
+model AdminAuditLog {
+  id             String   @id @default(uuid())
+  adminId        String // admin user id (matches JWT sub)
+  action         String   @db.VarChar(100)
+  entityType     String   @db.VarChar(100)
+  entityId       String?
+  previousValues Json?
+  newValues      Json?
+  ipAddress      String?  @db.VarChar(45)
+  userAgent      String?  @db.VarChar(500)
+  createdAt      DateTime @default(now())
+
+  admin User @relation("AdminAuditLogs", fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@map("admin_audit_logs")
+}
