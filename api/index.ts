@@ -27,7 +27,12 @@ export default async function handler(
   res: ServerResponse,
 ): Promise<void> {
   if (!bootstrapPromise) {
-    bootstrapPromise = bootstrap();
+    bootstrapPromise = bootstrap().catch((err) => {
+      // Don't cache a failed boot — let the next invocation retry instead
+      // of permanently 500ing every request on this warm lambda instance.
+      bootstrapPromise = null;
+      throw err;
+    });
   }
   await bootstrapPromise;
   expressApp(req, res);
