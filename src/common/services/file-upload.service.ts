@@ -1,12 +1,18 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import { put, del } from '@vercel/blob';
 
+/** Longest edge kept after downscaling, in pixels. */
+const MAX_IMAGE_DIMENSION = 1280;
+/** JPEG quality for re-encoded images. */
+const IMAGE_QUALITY = 70;
+
 @Injectable()
 export class FileUploadService {
+  private readonly logger = new Logger(FileUploadService.name);
   /**
    * Serverless filesystems are read-only and ephemeral, so uploads go to
    * Vercel Blob whenever a store is configured (BLOB_READ_WRITE_TOKEN is
@@ -147,6 +153,53 @@ export class FileUploadService {
   }
 
   /**
+   * Downscales and re-encodes an image so stored files are tens of KB rather
+   * than the multi-megabyte originals phone cameras produce. Non-images
+   * (evidence videos, PDFs) pass through untouched.
+   *
+   * Never fails an upload: if sharp is unavailable or cannot read the buffer,
+   * the original file is stored as-is.
+   */
+  private async compressImage(
+    file: Express.Multer.File,
+  ): Promise<{ buffer: Buffer; mimetype: string; ext: string }> {
+    const original = {
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+      ext: path.extname(file.originalname) || '.jpg',
+    };
+
+    if (!file.mimetype?.startsWith('image/')) {
+      return original;
+    }
+
+    try {
+      const sharp = (await import('sharp')).default;
+      const buffer = await sharp(file.buffer)
+        // Honour the EXIF orientation flag, otherwise phone photos that rely
+        // on it come out rotated once the metadata is dropped.
+        .rotate()
+        .resize({
+          width: MAX_IMAGE_DIMENSION,
+          height: MAX_IMAGE_DIMENSION,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: IMAGE_QUALITY, mozjpeg: true })
+        .toBuffer();
+
+      return { buffer, mimetype: 'image/jpeg', ext: '.jpg' };
+    } catch (error) {
+      this.logger.warn(
+        `Image compression skipped, storing original: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return original;
+    }
+  }
+
+  /**
    * Returns an absolute URL when using blob storage, or a `/uploads/...` path
    * when writing locally. Both are stored as-is; the app resolves a relative
    * path against the API origin and passes an absolute URL straight through.
@@ -155,13 +208,13 @@ export class FileUploadService {
     file: Express.Multer.File,
     subDir: string,
   ): Promise<string> {
-    const ext = path.extname(file.originalname) || '.jpg';
+    const { buffer, mimetype, ext } = await this.compressImage(file);
     const filename = `${randomUUID()}${ext}`;
 
     if (this.usesBlobStorage) {
-      const blob = await put(`${subDir}/${filename}`, file.buffer, {
+      const blob = await put(`${subDir}/${filename}`, buffer, {
         access: 'public',
-        contentType: file.mimetype,
+        contentType: mimetype,
         token: this.blobToken,
         // The filename is already a UUID; a second random suffix would only
         // make the stored path differ from the one we return.
@@ -173,7 +226,7 @@ export class FileUploadService {
     const dir = path.join(this.uploadsDir, subDir);
     const filePath = path.join(dir, filename);
 
-    await fsPromises.writeFile(filePath, file.buffer);
+    await fsPromises.writeFile(filePath, buffer);
 
     return `/uploads/${subDir}/${filename}`;
   }
