@@ -48,6 +48,24 @@ export class ProviderBiddingController {
     return this.biddingService.updateBid(userId, bidId, dto);
   }
 
+  @Post('/bids/:bidId/counter/accept')
+  @ApiOperation({ summary: "Accept the customer's counter-offer" })
+  async acceptCounter(
+    @GetUser('sub') userId: string,
+    @Param('bidId', ParseUUIDPipe) bidId: string,
+  ) {
+    return this.biddingService.acceptCounter(userId, bidId);
+  }
+
+  @Post('/bids/:bidId/counter/decline')
+  @ApiOperation({ summary: "Decline the customer's counter-offer" })
+  async declineCounter(
+    @GetUser('sub') userId: string,
+    @Param('bidId', ParseUUIDPipe) bidId: string,
+  ) {
+    return this.biddingService.declineCounter(userId, bidId);
+  }
+
   @Post('/bids/:bidId/withdraw')
   @ApiOperation({ summary: 'Withdraw own bid' })
   async withdrawBid(

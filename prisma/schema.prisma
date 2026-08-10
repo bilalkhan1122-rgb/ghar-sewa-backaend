@@ -44,6 +44,7 @@ enum VerificationStatus {
 
 enum BidStatus {
   PENDING
+  COUNTERED
   ACCEPTED
   REJECTED
   WITHDRAWN
@@ -108,6 +109,9 @@ enum MessageType {
 enum NotificationType {
   WELCOME
   NEW_MESSAGE
+  BID_COUNTERED
+  COUNTER_ACCEPTED
+  COUNTER_DECLINED
   NEW_JOB
   JOB_ACCEPTED
   NEW_BID
@@ -552,6 +556,12 @@ model Bid {
   offeredPrice Decimal @db.Decimal(10, 2)
   message     String?  @db.VarChar(500)
   status      BidStatus @default(PENDING)
+  // Customer's counter to this bid. One round only: the provider either
+  // accepts (booking is created at counterPrice) or declines (bid returns to
+  // PENDING so the original offeredPrice can still be accepted).
+  counterPrice   Decimal?  @db.Decimal(10, 2)
+  counterMessage String?   @db.VarChar(500)
+  counteredAt    DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

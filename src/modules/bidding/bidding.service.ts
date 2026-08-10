@@ -7,6 +7,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateBidDto } from './dtos/create-bid.dto';
 import { UpdateBidDto } from './dtos/update-bid.dto';
+import { CounterBidDto } from './dtos/counter-bid.dto';
 import { BidQueryDto, BidSortField } from './dtos/bid-query.dto';
 import { Logger } from 'nestjs-pino';
 import {
@@ -18,6 +19,8 @@ import {
   VerificationStatus,
   CancellationType,
   NotificationType,
+  type Bid,
+  type Job,
 } from 'generated/prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PenaltiesService } from '../penalties/penalties.service';
@@ -628,6 +631,22 @@ export class BiddingService {
       );
     }
 
+    return this.assignProviderFromBid(customerId, bid, bid.offeredPrice);
+  }
+
+  /**
+   * Assigns a provider to a job: rejects the other bids, creates the booking and
+   * sends everyone their notifications.
+   *
+   * Shared by accepting a bid outright and by a provider accepting the
+   * customer's counter-offer, which differ only in the agreed `amount`. Keeping
+   * one implementation means the two paths cannot drift apart.
+   */
+  private async assignProviderFromBid(
+    customerId: string,
+    bid: Bid & { job: Job },
+    amount: Prisma.Decimal | number,
+  ) {
     // Check if job already has an active (non-cancelled) booking
     const existingActiveBooking = await this.getActiveBookingForJob(bid.jobId);
     if (existingActiveBooking) {
@@ -638,7 +657,7 @@ export class BiddingService {
     const rejectedProviders = await this.prisma.bid.findMany({
       where: {
         jobId: bid.jobId,
-        id: { not: bidId },
+        id: { not: bid.id },
         status: BidStatus.PENDING,
       },
       select: { providerId: true },
@@ -647,7 +666,7 @@ export class BiddingService {
     // Accept bid and create booking in transaction
     const result = await this.prisma.$transaction(async (tx) => {
       const acceptedBid = await tx.bid.update({
-        where: { id: bidId },
+        where: { id: bid.id },
         data: { status: BidStatus.ACCEPTED },
       });
 
@@ -655,7 +674,7 @@ export class BiddingService {
       await tx.bid.updateMany({
         where: {
           jobId: bid.jobId,
-          id: { not: bidId },
+          id: { not: bid.id },
           status: BidStatus.PENDING,
         },
         data: { status: BidStatus.REJECTED },
@@ -672,7 +691,7 @@ export class BiddingService {
           customerId,
           providerId: bid.providerId,
           bookingType: 'BID' as const,
-          totalAmount: bid.offeredPrice,
+          totalAmount: amount,
           status: 'ACCEPTED' as const,
           acceptedAt: new Date(),
         },
@@ -699,11 +718,11 @@ export class BiddingService {
 
     this.logger.log({
       message: 'Bid accepted, booking created',
-      bidId,
+      bidId: bid.id,
       jobId: bid.jobId,
       customerId,
       providerId: bid.providerId,
-      amount: bid.offeredPrice,
+      amount,
     });
 
     // Notify the winning provider
@@ -711,7 +730,7 @@ export class BiddingService {
       userId: bid.providerId,
       type: NotificationType.BID_ACCEPTED,
       title: 'Your bid was accepted! 🎉',
-      message: `Your bid of Rs. ${Number(bid.offeredPrice)} for "${bid.job.title}" was accepted.`,
+      message: `Your bid of Rs. ${Number(amount)} for "${bid.job.title}" was accepted.`,
       relatedEntityType: 'JOB',
       relatedEntityId: bid.jobId,
     });
@@ -747,6 +766,165 @@ export class BiddingService {
     );
 
     return result;
+  }
+
+  // ─── Counter-offers ──────────────────────────────────────────────────
+
+  /**
+   * Customer proposes a different price on a provider's bid.
+   *
+   * Deliberately one round: the provider either accepts or declines, and
+   * declining restores the bid to PENDING so the original price is still on the
+   * table. There is no counter-back, which keeps the state machine small and
+   * avoids an open-ended haggle.
+   */
+  async counterBid(customerId: string, bidId: string, dto: CounterBidDto) {
+    const bid = await this.prisma.bid.findUnique({
+      where: { id: bidId },
+      include: { job: true },
+    });
+
+    if (!bid) throw new NotFoundException('Bid not found');
+    if (bid.job.customerId !== customerId) {
+      throw new ForbiddenException('You can only counter bids on your own jobs');
+    }
+    if (bid.job.status !== JobStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot counter a bid for a job that is ${bid.job.status.toLowerCase()}`,
+      );
+    }
+    if (bid.job.expiresAt <= new Date()) {
+      throw new BadRequestException('This job has expired');
+    }
+    if (bid.status !== BidStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot counter a bid that is ${bid.status.toLowerCase()}`,
+      );
+    }
+
+    const updated = await this.prisma.bid.update({
+      where: { id: bidId },
+      data: {
+        status: BidStatus.COUNTERED,
+        counterPrice: dto.counterPrice,
+        counterMessage: dto.message,
+        counteredAt: new Date(),
+      },
+    });
+
+    await this.prisma.jobTimeline.create({
+      data: {
+        jobId: bid.jobId,
+        event: 'BID_COUNTERED',
+        description: `Customer countered at Rs. ${dto.counterPrice}`,
+      },
+    });
+
+    void this.notifications.send({
+      userId: bid.providerId,
+      type: NotificationType.BID_COUNTERED,
+      title: 'Counter-offer received',
+      message: `The customer offered Rs. ${dto.counterPrice} for "${bid.job.title}" (you bid Rs. ${Number(bid.offeredPrice)}).`,
+      relatedEntityType: 'JOB',
+      relatedEntityId: bid.jobId,
+    });
+
+    this.logger.log({
+      message: 'Bid countered',
+      bidId,
+      jobId: bid.jobId,
+      customerId,
+      counterPrice: dto.counterPrice,
+    });
+
+    return updated;
+  }
+
+  /** Provider accepts the counter — the booking is created at the countered price. */
+  async acceptCounter(providerId: string, bidId: string) {
+    const bid = await this.prisma.bid.findUnique({
+      where: { id: bidId },
+      include: { job: true },
+    });
+
+    if (!bid) throw new NotFoundException('Bid not found');
+    if (bid.providerId !== providerId) {
+      throw new ForbiddenException('You can only respond to your own bids');
+    }
+    if (bid.status !== BidStatus.COUNTERED || bid.counterPrice === null) {
+      throw new BadRequestException('This bid has no counter-offer to accept');
+    }
+    if (bid.job.status !== JobStatus.PENDING) {
+      throw new BadRequestException(
+        `This job is ${bid.job.status.toLowerCase()}`,
+      );
+    }
+    if (bid.job.expiresAt <= new Date()) {
+      throw new BadRequestException('This job has expired');
+    }
+
+    const result = await this.assignProviderFromBid(
+      bid.job.customerId,
+      bid,
+      bid.counterPrice,
+    );
+
+    void this.notifications.send({
+      userId: bid.job.customerId,
+      type: NotificationType.COUNTER_ACCEPTED,
+      title: 'Counter-offer accepted 🎉',
+      message: `The provider accepted Rs. ${Number(bid.counterPrice)} for "${bid.job.title}".`,
+      relatedEntityType: 'JOB',
+      relatedEntityId: bid.jobId,
+    });
+
+    return result;
+  }
+
+  /** Provider declines — the bid returns to PENDING at its original price. */
+  async declineCounter(providerId: string, bidId: string) {
+    const bid = await this.prisma.bid.findUnique({
+      where: { id: bidId },
+      include: { job: true },
+    });
+
+    if (!bid) throw new NotFoundException('Bid not found');
+    if (bid.providerId !== providerId) {
+      throw new ForbiddenException('You can only respond to your own bids');
+    }
+    if (bid.status !== BidStatus.COUNTERED) {
+      throw new BadRequestException('This bid has no counter-offer to decline');
+    }
+
+    const declinedPrice = bid.counterPrice;
+
+    const updated = await this.prisma.bid.update({
+      where: { id: bidId },
+      data: {
+        status: BidStatus.PENDING,
+        counterPrice: null,
+        counterMessage: null,
+        counteredAt: null,
+      },
+    });
+
+    void this.notifications.send({
+      userId: bid.job.customerId,
+      type: NotificationType.COUNTER_DECLINED,
+      title: 'Counter-offer declined',
+      message: `The provider declined Rs. ${Number(declinedPrice)} for "${bid.job.title}". Their original bid of Rs. ${Number(bid.offeredPrice)} still stands.`,
+      relatedEntityType: 'JOB',
+      relatedEntityId: bid.jobId,
+    });
+
+    this.logger.log({
+      message: 'Counter-offer declined',
+      bidId,
+      jobId: bid.jobId,
+      providerId,
+    });
+
+    return updated;
   }
 
   // ─── Customer: Reject a Bid ──────────────────────────────────────────

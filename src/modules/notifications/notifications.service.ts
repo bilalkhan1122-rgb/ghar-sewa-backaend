@@ -52,6 +52,9 @@ const CATEGORY_TO_PREFERENCE: Record<
 const TYPE_TO_CATEGORY: Record<NotificationType, NotificationCategory> = {
   [NotificationType.WELCOME]: NotificationCategory.SYSTEM,
   [NotificationType.NEW_MESSAGE]: NotificationCategory.CHAT,
+  [NotificationType.BID_COUNTERED]: NotificationCategory.BID,
+  [NotificationType.COUNTER_ACCEPTED]: NotificationCategory.BID,
+  [NotificationType.COUNTER_DECLINED]: NotificationCategory.BID,
   [NotificationType.NEW_JOB]: NotificationCategory.JOB,
   [NotificationType.JOB_ACCEPTED]: NotificationCategory.JOB,
   [NotificationType.NEW_BID]: NotificationCategory.BID,
