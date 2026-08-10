@@ -107,6 +107,7 @@ enum MessageType {
 
 enum NotificationType {
   WELCOME
+  NEW_MESSAGE
   NEW_JOB
   JOB_ACCEPTED
   NEW_BID
@@ -157,6 +158,7 @@ enum NotificationType {
 enum NotificationCategory {
   JOB
   BID
+  CHAT
   BOOKING
   REVIEW
   VERIFICATION

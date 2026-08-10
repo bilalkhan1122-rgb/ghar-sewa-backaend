@@ -38,6 +38,7 @@ const CATEGORY_TO_PREFERENCE: Record<
 > = {
   [NotificationCategory.JOB]: 'jobEnabled',
   [NotificationCategory.BID]: 'jobEnabled',
+  [NotificationCategory.CHAT]: 'chatEnabled',
   [NotificationCategory.BOOKING]: 'bookingEnabled',
   [NotificationCategory.REVIEW]: 'bookingEnabled',
   [NotificationCategory.VERIFICATION]: 'systemEnabled',
@@ -50,6 +51,7 @@ const CATEGORY_TO_PREFERENCE: Record<
 
 const TYPE_TO_CATEGORY: Record<NotificationType, NotificationCategory> = {
   [NotificationType.WELCOME]: NotificationCategory.SYSTEM,
+  [NotificationType.NEW_MESSAGE]: NotificationCategory.CHAT,
   [NotificationType.NEW_JOB]: NotificationCategory.JOB,
   [NotificationType.JOB_ACCEPTED]: NotificationCategory.JOB,
   [NotificationType.NEW_BID]: NotificationCategory.BID,

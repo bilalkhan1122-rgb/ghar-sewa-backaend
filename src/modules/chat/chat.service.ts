@@ -9,6 +9,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { FileUploadService } from 'src/common/services/file-upload.service';
 import { ChatGateway } from './chat.gateway';
+import { NotificationsService } from 'src/modules/notifications/notifications.service';
 import { CreateConversationDto } from './dtos/create-conversation.dto';
 import { SendMessageDto, ChatMessageType } from './dtos/send-message.dto';
 import { UpdateMessageDto } from './dtos/update-message.dto';
@@ -24,6 +25,7 @@ import {
   UserRole,
   MessageType,
   BookingStatus,
+  NotificationType,
 } from 'generated/prisma/client';
 
 /**
@@ -40,6 +42,7 @@ export class ChatService {
     @Inject(forwardRef(() => ChatGateway))
     private readonly gateway: ChatGateway,
     private readonly logger: Logger,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── Create / Retrieve Conversation ──────────────────────────────────
@@ -189,6 +192,7 @@ export class ChatService {
 
     // Real-time broadcast (also delivered to the other party's personal room)
     this.gateway.emitNewMessage(conversationId, message, conversation, userId);
+    this.notifyNewMessage(conversation, userId, lastMessage);
 
     this.logger.log({
       message: 'Message sent',
@@ -238,6 +242,7 @@ export class ChatService {
     });
 
     this.gateway.emitNewMessage(conversationId, message, conversation, userId);
+    this.notifyNewMessage(conversation, userId, lastMessage);
 
     return message;
   }
@@ -612,6 +617,34 @@ export class ChatService {
         readAt: null,
         deletedAt: null,
       },
+    });
+  }
+
+
+  /**
+   * Notifies the other participant about a new message.
+   *
+   * Fire-and-forget so a notification failure can never fail the send, and
+   * skipped for the sender. The NEW_MESSAGE type maps to the CHAT category,
+   * which respects the user's existing chatEnabled preference.
+   */
+  private notifyNewMessage(
+    conversation: { id: string; customerId: string; providerId: string },
+    senderId: string,
+    preview: string,
+  ) {
+    const recipientId =
+      conversation.customerId === senderId
+        ? conversation.providerId
+        : conversation.customerId;
+
+    void this.notifications.send({
+      userId: recipientId,
+      type: NotificationType.NEW_MESSAGE,
+      title: 'New message',
+      message: preview || 'You have a new message',
+      relatedEntityType: 'CONVERSATION',
+      relatedEntityId: conversation.id,
     });
   }
 
