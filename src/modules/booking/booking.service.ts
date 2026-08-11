@@ -88,7 +88,8 @@ export class BookingService {
           latitude: dto.latitude,
           longitude: dto.longitude,
           offeredPrice: dto.totalAmount,
-          status: JobStatus.ACCEPTED,
+          // Stays PENDING until the provider accepts the request.
+          status: JobStatus.PENDING,
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h expiry (kept for record)
         },
       });
@@ -101,8 +102,9 @@ export class BookingService {
           providerId: dto.providerId,
           bookingType: BookingType.DIRECT,
           totalAmount: dto.totalAmount,
-          status: BookingStatus.ACCEPTED,
-          acceptedAt: new Date(),
+          // The customer picked this provider; the provider has not agreed yet.
+          // acceptedAt is deliberately left null until they do.
+          status: BookingStatus.PENDING,
         },
       });
 
@@ -118,8 +120,8 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: job.id,
-          event: 'PROVIDER_ASSIGNED',
-          description: 'Provider directly assigned',
+          event: 'PROVIDER_REQUESTED',
+          description: 'Customer requested this provider directly',
         },
       });
 
@@ -135,21 +137,13 @@ export class BookingService {
       amount: dto.totalAmount,
     });
 
-    // Notify the customer that their job was accepted
-    void this.notifications.send({
-      userId: customerId,
-      type: NotificationType.JOB_ACCEPTED,
-      title: 'Job accepted! ✅',
-      message: `Your job "${dto.title}" has been accepted by a provider.`,
-      relatedEntityType: 'JOB',
-      relatedEntityId: result.job.id,
-    });
-    // Notify the provider of the direct booking
+    // Only the provider is notified: nothing has been agreed yet, so telling
+    // the customer their job was "accepted" would be untrue.
     void this.notifications.send({
       userId: dto.providerId,
-      type: NotificationType.BOOKING_CONFIRMED,
-      title: 'New direct booking 📅',
-      message: `You have been booked for "${dto.title}" (Rs. ${dto.totalAmount}).`,
+      type: NotificationType.BOOKING_REQUESTED,
+      title: 'New booking request 📅',
+      message: `A customer requested you for "${dto.title}" (Rs. ${dto.totalAmount}). Accept or decline.`,
       relatedEntityType: 'BOOKING',
       relatedEntityId: result.booking.id,
     });
@@ -161,6 +155,126 @@ export class BookingService {
   }
 
   // ─── Start Job (Provider) ──────────────────────────────────────────
+
+  // ─── Provider: respond to a direct booking request ───────────────────
+
+  /**
+   * Accepts a direct booking. Until this happens the job is still PENDING and
+   * nothing in the app claims the provider agreed.
+   */
+  async acceptBookingRequest(providerId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { job: true },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.providerId !== providerId) {
+      throw new ForbiddenException('You can only respond to your own booking requests');
+    }
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `This request is already ${booking.status.toLowerCase()}`,
+      );
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.ACCEPTED, acceptedAt: new Date() },
+      });
+      await tx.job.update({
+        where: { id: booking.jobId },
+        data: { status: JobStatus.ACCEPTED },
+      });
+      await tx.jobTimeline.create({
+        data: {
+          jobId: booking.jobId,
+          event: 'PROVIDER_ASSIGNED',
+          description: 'Provider accepted the booking request',
+        },
+      });
+      return updated;
+    });
+
+    void this.notifications.send({
+      userId: booking.customerId,
+      type: NotificationType.BOOKING_CONFIRMED,
+      title: 'Booking confirmed ✅',
+      message: `Your provider accepted "${booking.job.title}".`,
+      relatedEntityType: 'BOOKING',
+      relatedEntityId: bookingId,
+    });
+
+    this.logger.log({
+      message: 'Direct booking accepted',
+      bookingId,
+      jobId: booking.jobId,
+      providerId,
+    });
+
+    return result;
+  }
+
+  /**
+   * Declines a direct booking. The job returns to the open pool rather than
+   * being cancelled, so the customer can pick someone else or take bids.
+   */
+  async declineBookingRequest(providerId: string, bookingId: string, reason?: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { job: true },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.providerId !== providerId) {
+      throw new ForbiddenException('You can only respond to your own booking requests');
+    }
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `This request is already ${booking.status.toLowerCase()}`,
+      );
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: BookingStatus.CANCELLED, cancelledAt: new Date() },
+      });
+      await tx.job.update({
+        where: { id: booking.jobId },
+        data: { status: JobStatus.PENDING, expiresAt: this.calculateExpiry() },
+      });
+      await tx.jobTimeline.create({
+        data: {
+          jobId: booking.jobId,
+          event: 'PROVIDER_DECLINED',
+          description: reason
+            ? `Provider declined the request: ${reason}`
+            : 'Provider declined the request',
+        },
+      });
+      return updated;
+    });
+
+    void this.notifications.send({
+      userId: booking.customerId,
+      type: NotificationType.JOB_CANCELLED,
+      title: 'Provider declined',
+      message: `Your request for "${booking.job.title}" was declined. The job is open for other providers.`,
+      relatedEntityType: 'JOB',
+      relatedEntityId: booking.jobId,
+    });
+
+    this.logger.log({
+      message: 'Direct booking declined',
+      bookingId,
+      jobId: booking.jobId,
+      providerId,
+    });
+
+    return result;
+  }
 
   async startJob(providerId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({

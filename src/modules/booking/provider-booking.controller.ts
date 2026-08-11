@@ -63,6 +63,25 @@ export class ProviderBookingController {
     return this.bookingService.getJobTimeline(userId, jobId);
   }
 
+  @Post('/:bookingId/accept')
+  @ApiOperation({ summary: 'Accept a direct booking request' })
+  async acceptRequest(
+    @GetUser('sub') userId: string,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+  ) {
+    return this.bookingService.acceptBookingRequest(userId, bookingId);
+  }
+
+  @Post('/:bookingId/decline')
+  @ApiOperation({ summary: 'Decline a direct booking request' })
+  async declineRequest(
+    @GetUser('sub') userId: string,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.bookingService.declineBookingRequest(userId, bookingId, body?.reason);
+  }
+
   @Post('/:bookingId/start')
   @ApiOperation({ summary: 'Start work on a job' })
   async startJob(
