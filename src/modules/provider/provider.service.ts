@@ -724,8 +724,21 @@ export class ProviderService {
         this.prisma.booking.count({
           where: { providerId },
         }),
+        // Everything still on the provider's plate, not just work already
+        // started: a pending request and an accepted-but-not-started job both
+        // need their attention, and counting only IN_PROGRESS showed
+        // "0 active" while a request was sitting unanswered.
         this.prisma.booking.count({
-          where: { providerId, status: BookingStatus.IN_PROGRESS },
+          where: {
+            providerId,
+            status: {
+              in: [
+                BookingStatus.PENDING,
+                BookingStatus.ACCEPTED,
+                BookingStatus.IN_PROGRESS,
+              ],
+            },
+          },
         }),
         this.prisma.booking.count({
           where: { providerId, status: BookingStatus.COMPLETED },
