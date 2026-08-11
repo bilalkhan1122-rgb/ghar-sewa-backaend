@@ -977,7 +977,15 @@ export class BookingService {
     const bookings = await this.prisma.booking.findMany({
       where: {
         providerId,
-        status: { in: [BookingStatus.ACCEPTED, BookingStatus.IN_PROGRESS] },
+        // PENDING included so an unanswered direct booking request surfaces on
+        // the provider's dashboard rather than sitting unseen in their list.
+        status: {
+          in: [
+            BookingStatus.PENDING,
+            BookingStatus.ACCEPTED,
+            BookingStatus.IN_PROGRESS,
+          ],
+        },
       },
       include: {
         job: {
