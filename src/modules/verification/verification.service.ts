@@ -279,11 +279,12 @@ export class VerificationService {
   // ─── Admin: List pending / filtered requests ────────────────────────
 
   async adminListRequests(query: VerificationQueryDto) {
-    const { page = 1, limit = 10, status } = query;
+    const { page = 1, limit = 10, status, providerId } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.VerificationRequestWhereInput = {
       ...(status && { status }),
+      ...(providerId && { providerId }),
     };
 
     const [data, total] = await Promise.all([

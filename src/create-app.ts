@@ -35,7 +35,11 @@ export async function configureApp(
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: true,
       crossOriginOpenerPolicy: { policy: 'same-origin' },
-      crossOriginResourcePolicy: { policy: 'same-origin' },
+      // Uploaded images (CNIC scans, face photos, gallery) are embedded by the
+      // admin dashboard, which runs on a different origin — 'same-origin' makes
+      // the browser refuse to render them. Blob-hosted uploads are public URLs
+      // already, so this does not widen access to anything.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
       dnsPrefetchControl: { allow: false },
       frameguard: { action: 'deny' },
       hidePoweredBy: true,

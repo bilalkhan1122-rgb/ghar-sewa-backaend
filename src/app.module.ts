@@ -35,7 +35,12 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
       {
         name: 'default',
         ttl: 60000, // 1 minute
-        limit: 10, // 10 requests per minute
+        // Applies to every endpoint that does not set its own @Throttle. The
+        // previous value (10/min) was low enough that ordinary authenticated
+        // use — an admin opening a few pages, or a customer browsing the app —
+        // returned 429 within seconds. This is DoS protection only; per-endpoint
+        // brute-force limits live on the auth routes via @Throttle decorators.
+        limit: 300,
       },
       {
         name: 'strict',
