@@ -109,14 +109,13 @@ export class ChatService {
       );
     }
 
-    // Return existing conversation if present
+    // One thread per pair of people. The job above is still what authorises the
+    // chat — it is just not part of the conversation's identity, so talking
+    // about a second job continues the existing thread instead of starting an
+    // empty one and stranding the history.
     const existing = await this.prisma.conversation.findUnique({
       where: {
-        jobId_customerId_providerId: {
-          jobId: job.id,
-          customerId,
-          providerId,
-        },
+        customerId_providerId: { customerId, providerId },
       },
       include: this.conversationIncludes(),
     });

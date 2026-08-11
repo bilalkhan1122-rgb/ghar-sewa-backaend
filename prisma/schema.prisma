@@ -835,7 +835,9 @@ model Conversation {
   provider User     @relation("ProviderConversations", fields: [providerId], references: [id])
   messages Message[]
 
-  @@unique([jobId, customerId, providerId])
+  // One thread per pair of people, not per job: chatting about a second job
+  // continues the same conversation. `jobId` records where it started.
+  @@unique([customerId, providerId])
   @@index([customerId])
   @@index([providerId])
   @@index([jobId])
