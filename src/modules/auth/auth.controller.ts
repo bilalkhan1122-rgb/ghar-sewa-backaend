@@ -169,8 +169,13 @@ export class AuthController {
       COOKIE_CONFIG.REFRESH_TOKEN.options as CookieOptions,
     );
 
+    // The access token is returned in the body as well as the cookie: the
+    // mobile app needs it in hand to authenticate its chat WebSocket, which
+    // does not carry cookies from the native fetch jar.
     return {
       message: 'Tokens refreshed successfully',
+      accessToken,
+      refreshToken,
     };
   }
 
