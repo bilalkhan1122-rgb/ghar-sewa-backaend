@@ -198,7 +198,11 @@ export class AnalyticsService {
         disputedJobs,
       },
       revenue: {
-        totalCommission: this.toNumber(commissionAgg),
+        // Commission rows are debits against the provider's wallet, so the
+        // stored amounts are negative. The per-day series already reports the
+        // magnitude; without this the totals contradicted it in the same
+        // response (-540 against +540).
+        totalCommission: this.absNumber(commissionAgg),
         totalCompletedJobValue: this.toNumber(completedValueAgg),
         totalProviderEarnings: this.toNumber(providerEarningsAgg),
         totalWithdrawals: this.absNumber(withdrawalsAgg),
@@ -353,7 +357,11 @@ export class AnalyticsService {
     return {
       period: this.describeRange(range),
       totals: {
-        totalCommission: this.toNumber(commissionAgg),
+        // Commission rows are debits against the provider's wallet, so the
+        // stored amounts are negative. The per-day series already reports the
+        // magnitude; without this the totals contradicted it in the same
+        // response (-540 against +540).
+        totalCommission: this.absNumber(commissionAgg),
         totalCompletedJobValue: this.toNumber(completedValueAgg),
         totalProviderEarnings: this.toNumber(providerEarningsAgg),
         totalWithdrawals: this.absNumber(withdrawalsAgg),
