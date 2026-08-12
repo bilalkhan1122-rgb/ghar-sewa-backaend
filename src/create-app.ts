@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import basicAuth from "express-basic-auth";
 import helmet from "helmet";
 import { Logger } from "nestjs-pino";
+import { randomUUID } from "crypto";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 
@@ -55,11 +56,20 @@ export async function configureApp(
     }),
   );
 
-  // Swagger setup with basic auth
+  // Swagger, behind basic auth.
+  //
+  // The guard covers /docs-json and /docs-yaml as well as /docs: those are
+  // sibling paths, not children, so a guard mounted on "/docs" alone left the
+  // entire API spec publicly readable — every route, DTO and example.
+  //
+  // Credentials come from the environment; the previous hardcoded pair was
+  // committed to the repo and therefore public.
+  const docsUser = process.env.SWAGGER_USER || "gharsewa";
+  const docsPassword = process.env.SWAGGER_PASSWORD;
   app.use(
-    "/docs",
+    ["/docs", "/docs-json", "/docs-yaml"],
     basicAuth({
-      users: { faddy: "123456" },
+      users: { [docsUser]: docsPassword || randomUUID() },
       challenge: true,
     }),
   );
