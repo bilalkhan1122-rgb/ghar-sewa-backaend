@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Query,
   Patch,
   Delete,
   Body,
@@ -261,6 +262,25 @@ export class ProviderController {
 export class PublicProviderController {
   constructor(private readonly providerService: ProviderService) {}
 
+  @Public()
+  @Get('/providers')
+  async listProviders(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: 'rating' | 'name' | 'price',
+  ) {
+    return this.providerService.listPublicProviders({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      categoryId,
+      search,
+      sortBy,
+    });
+  }
+
+  // Declared after /providers so the literal path is not captured as an :id.
   @Public()
   @Get('/provider/:id')
   async getPublicProfile(@Param('id') id: string) {

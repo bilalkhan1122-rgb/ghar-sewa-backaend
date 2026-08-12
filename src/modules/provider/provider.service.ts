@@ -471,6 +471,97 @@ export class ProviderService {
 
   // ─── Public Provider Profile ─────────────────────────────────────────
 
+  // ─── Public: browse all providers ────────────────────────────────────
+
+  /**
+   * Every bookable provider, optionally narrowed by service or search term.
+   *
+   * The visibility rules match the per-category listing and what booking
+   * requires, so a provider shown here can always actually be booked.
+   */
+  async listPublicProviders(params: {
+    page?: number;
+    limit?: number;
+    categoryId?: string;
+    search?: string;
+    sortBy?: 'rating' | 'name' | 'price';
+  }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+    const search = params.search?.trim();
+
+    const where: Prisma.UserWhereInput = {
+      role: UserRole.PROVIDER,
+      isActive: true,
+      status: UserStatus.ACTIVE,
+      verificationStatus: VerificationStatus.APPROVED,
+      profileCompleted: true,
+      ...(params.categoryId && {
+        providerProfile: {
+          categories: { some: { categoryId: params.categoryId } },
+        },
+      }),
+      ...(search && {
+        OR: [
+          { fullName: { contains: search, mode: 'insensitive' as const } },
+          {
+            providerProfile: {
+              serviceLocation: { contains: search, mode: 'insensitive' as const },
+            },
+          },
+        ],
+      }),
+    };
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          city: true,
+          ratingSummary: true,
+          providerProfile: { include: { categories: true } },
+        },
+        orderBy:
+          params.sortBy === 'name'
+            ? { fullName: 'asc' }
+            : params.sortBy === 'price'
+              ? { providerProfile: { hourlyRate: 'asc' } }
+              : { ratingSummary: { averageRating: 'desc' } },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    const data = users.map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      profilePhoto: u.profilePhoto,
+      bio: u.providerProfile?.bio ?? null,
+      hourlyRate: u.providerProfile?.hourlyRate ?? null,
+      serviceLocation: u.providerProfile?.serviceLocation ?? null,
+      serviceRadius: u.providerProfile?.serviceRadius ?? null,
+      city: u.city,
+      rating: u.ratingSummary?.averageRating ?? 0,
+      totalReviews: u.ratingSummary?.totalReviews ?? 0,
+    }));
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrevious: page > 1,
+      },
+    };
+  }
+
   async getPublicProfile(providerId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
