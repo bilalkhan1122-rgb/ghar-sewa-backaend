@@ -534,7 +534,7 @@ export class ProviderService {
       this.prisma.user.count({ where }),
     ]);
 
-    const data = users.map((u) => ({
+    const rows = users.map((u) => ({
       id: u.id,
       fullName: u.fullName,
       profilePhoto: u.profilePhoto,
@@ -546,6 +546,14 @@ export class ProviderService {
       rating: u.ratingSummary?.averageRating ?? 0,
       totalReviews: u.ratingSummary?.totalReviews ?? 0,
     }));
+
+    // Postgres sorts NULLs first on DESC, so providers with no ratings yet came
+    // back above the highest-rated ones under "Top rated". Prisma cannot express
+    // nulls-last through a relation, so the page is reordered here.
+    const data =
+      params.sortBy === 'name' || params.sortBy === 'price'
+        ? rows
+        : [...rows].sort((a, b) => Number(b.rating) - Number(a.rating));
 
     const totalPages = Math.ceil(total / limit);
 
