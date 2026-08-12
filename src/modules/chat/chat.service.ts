@@ -430,6 +430,18 @@ export class ChatService {
 
     const unreadCount = await this.unreadCount(conversationId, userId);
 
+    // Read receipts drive the "seen" ticks, so they need the same Pusher
+    // delivery as the messages themselves — the gateway below is local-only.
+    const otherPartyId =
+      conversation.customerId === userId
+        ? conversation.providerId
+        : conversation.customerId;
+    void this.realtime.publish(
+      PUSHER_CHANNELS.user(otherPartyId),
+      PUSHER_EVENTS.CHAT_MESSAGE_READ,
+      { conversationId, userId, readAt: readAt.toISOString() },
+    );
+
     // Real-time read receipt
     this.gateway.emitReadReceipt(
       conversationId,

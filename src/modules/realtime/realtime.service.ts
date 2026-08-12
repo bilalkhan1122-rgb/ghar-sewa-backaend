@@ -11,6 +11,8 @@ import { PUSHER_CHANNELS } from "./realtime-channels";
 export const PUSHER_EVENTS = {
   /** A new chat message, delivered to the recipient's private user channel. */
   CHAT_MESSAGE_NEW: "chat.message.new",
+  /** The other party opened the thread; their read receipt for our messages. */
+  CHAT_MESSAGE_READ: "chat.message.read",
   PROVIDER_RANK_UPDATED: "provider.rank.updated",
   JOB_URGENT_CREATED: "job.urgent.created",
   JOB_URGENT_EXPIRED: "job.urgent.expired",
