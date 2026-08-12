@@ -1,10 +1,10 @@
-import 'reflect-metadata';
-import type { IncomingMessage, ServerResponse } from 'http';
-import express from 'express';
-import { NestFactory } from '@nestjs/core';
-import { ExpressAdapter } from '@nestjs/platform-express';
-import { AppModule } from './app.module';
-import { configureApp } from './create-app';
+import "reflect-metadata";
+import type { IncomingMessage, ServerResponse } from "http";
+import express from "express";
+import { NestFactory } from "@nestjs/core";
+import { ExpressAdapter } from "@nestjs/platform-express";
+import { AppModule } from "./app.module";
+import { configureApp } from "./create-app";
 
 // Serverless entrypoint. Boots the Nest app once per warm lambda instance (on
 // top of a bare Express instance) and reuses it for subsequent invocations

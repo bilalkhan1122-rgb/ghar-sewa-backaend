@@ -3,14 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateCategoryDto } from './dtos/create-category.dto';
-import { UpdateCategoryDto } from './dtos/update-category.dto';
-import { CategoryQueryDto, CategorySortField } from './dtos/category-query.dto';
-import { ReorderCategoriesDto } from './dtos/reorder-categories.dto';
-import { Logger } from 'nestjs-pino';
-import { Prisma } from 'generated/prisma/client';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { CreateCategoryDto } from "./dtos/create-category.dto";
+import { UpdateCategoryDto } from "./dtos/update-category.dto";
+import { CategoryQueryDto, CategorySortField } from "./dtos/category-query.dto";
+import { ReorderCategoriesDto } from "./dtos/reorder-categories.dto";
+import { Logger } from "nestjs-pino";
+import { Prisma, ProviderRank } from "generated/prisma/client";
 
 @Injectable()
 export class CategoriesService {
@@ -24,9 +24,9 @@ export class CategoriesService {
   private generateSlug(name: string): string {
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .replace(/-+/g, '-');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .replace(/-+/g, "-");
   }
 
   private async ensureUniqueSlug(
@@ -55,7 +55,7 @@ export class CategoriesService {
       limit = 10,
       search,
       sortBy = CategorySortField.DISPLAY_ORDER,
-      sortOrder = 'asc',
+      sortOrder = "asc",
     } = query;
 
     const skip = (page - 1) * limit;
@@ -63,16 +63,16 @@ export class CategoriesService {
     const where: Prisma.ServiceCategoryWhereInput = {
       isActive: true,
       ...(search && {
-        name: { contains: search, mode: 'insensitive' },
+        name: { contains: search, mode: "insensitive" },
       }),
     };
 
     const orderByField =
       sortBy === CategorySortField.NAME
-        ? 'name'
+        ? "name"
         : sortBy === CategorySortField.CREATED_AT
-          ? 'createdAt'
-          : 'displayOrder';
+          ? "createdAt"
+          : "displayOrder";
 
     const [categories, total] = await Promise.all([
       this.prisma.serviceCategory.findMany({
@@ -105,7 +105,7 @@ export class CategoriesService {
     });
 
     if (!category) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     return category;
@@ -117,7 +117,7 @@ export class CategoriesService {
     });
 
     if (!category) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     return category;
@@ -128,16 +128,16 @@ export class CategoriesService {
   async searchCategories(query: string) {
     if (!query || query.length < 2) {
       throw new BadRequestException(
-        'Search query must be at least 2 characters',
+        "Search query must be at least 2 characters",
       );
     }
 
     return this.prisma.serviceCategory.findMany({
       where: {
         isActive: true,
-        name: { contains: query, mode: 'insensitive' },
+        name: { contains: query, mode: "insensitive" },
       },
-      orderBy: { displayOrder: 'asc' },
+      orderBy: { displayOrder: "asc" },
       take: 20,
     });
   }
@@ -154,7 +154,7 @@ export class CategoriesService {
       where: { id: categoryId },
     });
     if (!category) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     const skip = (page - 1) * limit;
@@ -164,10 +164,10 @@ export class CategoriesService {
       categoryId,
       provider: {
         user: {
-          role: 'PROVIDER' as const,
+          role: "PROVIDER" as const,
           isActive: true,
-          status: 'ACTIVE' as const,
-          verificationStatus: 'APPROVED' as const,
+          status: "ACTIVE" as const,
+          verificationStatus: "APPROVED" as const,
         },
       },
     };
@@ -181,12 +181,17 @@ export class CategoriesService {
           provider: {
             include: {
               user: {
-                include: { city: true, ratingSummary: true },
+                include: {
+                  city: true,
+                  ratingSummary: true,
+                  // Module 19: rank badge for customer-facing listings
+                  providerRanking: true,
+                },
               },
             },
           },
         },
-        orderBy: { provider: { user: { fullName: 'asc' } } },
+        orderBy: { provider: { user: { fullName: "asc" } } },
       }),
       this.prisma.providerServiceCategory.count({ where }),
     ]);
@@ -202,6 +207,9 @@ export class CategoriesService {
       city: r.provider.user.city,
       rating: r.provider.user.ratingSummary?.averageRating ?? 0,
       totalReviews: r.provider.user.ratingSummary?.totalReviews ?? 0,
+      // Module 19: rank — the clean integration point for future
+      // rank-based sorting/boosting of provider listings.
+      rank: r.provider.user.providerRanking?.currentRank ?? ProviderRank.NONE,
     }));
 
     const totalPages = Math.ceil(total / limit);
@@ -224,7 +232,7 @@ export class CategoriesService {
   async getAvailableCategories() {
     return this.prisma.serviceCategory.findMany({
       where: { isActive: true },
-      orderBy: { displayOrder: 'asc' },
+      orderBy: { displayOrder: "asc" },
     });
   }
 
@@ -239,14 +247,14 @@ export class CategoriesService {
 
     if (categories.length !== categoryIds.length) {
       throw new BadRequestException(
-        'One or more categories are invalid or inactive',
+        "One or more categories are invalid or inactive",
       );
     }
 
     // Check for duplicates
     const uniqueIds = new Set(categoryIds);
     if (uniqueIds.size !== categoryIds.length) {
-      throw new BadRequestException('Duplicate category IDs are not allowed');
+      throw new BadRequestException("Duplicate category IDs are not allowed");
     }
 
     // Remove existing selections and add new ones
@@ -264,12 +272,12 @@ export class CategoriesService {
     }
 
     this.logger.log({
-      message: 'Provider categories updated',
+      message: "Provider categories updated",
       userId,
       categoryCount: categoryIds.length,
     });
 
-    return { message: 'Categories updated successfully', categoryIds };
+    return { message: "Categories updated successfully", categoryIds };
   }
 
   async getProviderSelectedCategories(userId: string) {
@@ -289,10 +297,10 @@ export class CategoriesService {
 
     // Check for duplicate name
     const existingName = await this.prisma.serviceCategory.findFirst({
-      where: { name: { equals: dto.name, mode: 'insensitive' } },
+      where: { name: { equals: dto.name, mode: "insensitive" } },
     });
     if (existingName) {
-      throw new ConflictException('A category with this name already exists');
+      throw new ConflictException("A category with this name already exists");
     }
 
     const category = await this.prisma.serviceCategory.create({
@@ -307,7 +315,7 @@ export class CategoriesService {
     });
 
     this.logger.log({
-      message: 'Category created',
+      message: "Category created",
       categoryId: category.id,
       name: category.name,
     });
@@ -320,19 +328,19 @@ export class CategoriesService {
       where: { id },
     });
     if (!existing) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     // Check for duplicate name
     if (dto.name) {
       const duplicateName = await this.prisma.serviceCategory.findFirst({
         where: {
-          name: { equals: dto.name, mode: 'insensitive' },
+          name: { equals: dto.name, mode: "insensitive" },
           id: { not: id },
         },
       });
       if (duplicateName) {
-        throw new ConflictException('A category with this name already exists');
+        throw new ConflictException("A category with this name already exists");
       }
     }
 
@@ -350,7 +358,7 @@ export class CategoriesService {
         where: { slug, id: { not: id } },
       });
       if (duplicateSlug) {
-        throw new ConflictException('A category with this slug already exists');
+        throw new ConflictException("A category with this slug already exists");
       }
     }
 
@@ -369,7 +377,7 @@ export class CategoriesService {
     });
 
     this.logger.log({
-      message: 'Category updated',
+      message: "Category updated",
       categoryId: id,
     });
 
@@ -381,7 +389,7 @@ export class CategoriesService {
       where: { id },
     });
     if (!existing) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     // Soft delete by setting isActive to false
@@ -391,12 +399,12 @@ export class CategoriesService {
     });
 
     this.logger.log({
-      message: 'Category soft-deleted',
+      message: "Category soft-deleted",
       categoryId: id,
       name: existing.name,
     });
 
-    return { message: 'Category deleted successfully' };
+    return { message: "Category deleted successfully" };
   }
 
   async toggleCategoryStatus(id: string) {
@@ -404,7 +412,7 @@ export class CategoriesService {
       where: { id },
     });
     if (!existing) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     const updated = await this.prisma.serviceCategory.update({
@@ -423,7 +431,7 @@ export class CategoriesService {
     });
 
     if (categories.length !== dto.categoryIds.length) {
-      throw new BadRequestException('One or more category IDs are invalid');
+      throw new BadRequestException("One or more category IDs are invalid");
     }
 
     // Update display order in a transaction
@@ -436,7 +444,7 @@ export class CategoriesService {
       ),
     );
 
-    return { message: 'Categories reordered successfully' };
+    return { message: "Categories reordered successfully" };
   }
 
   async getCategoryStats(id: string) {
@@ -444,7 +452,7 @@ export class CategoriesService {
       where: { id },
     });
     if (!existing) {
-      throw new NotFoundException('Category not found');
+      throw new NotFoundException("Category not found");
     }
 
     const [totalProviders, activeProviders, totalJobs, completedJobs] =
@@ -458,7 +466,7 @@ export class CategoriesService {
             provider: {
               user: {
                 isActive: true,
-                verificationStatus: 'APPROVED',
+                verificationStatus: "APPROVED",
               },
             },
           },
@@ -467,7 +475,7 @@ export class CategoriesService {
           where: { categoryId: id },
         }),
         this.prisma.job.count({
-          where: { categoryId: id, status: 'COMPLETED' },
+          where: { categoryId: id, status: "COMPLETED" },
         }),
       ]);
 
@@ -489,7 +497,7 @@ export class CategoriesService {
       limit = 10,
       search,
       sortBy = CategorySortField.DISPLAY_ORDER,
-      sortOrder = 'asc',
+      sortOrder = "asc",
       isActive,
     } = query;
 
@@ -497,19 +505,19 @@ export class CategoriesService {
 
     const where: Prisma.ServiceCategoryWhereInput = {
       ...(search && {
-        name: { contains: search, mode: 'insensitive' },
+        name: { contains: search, mode: "insensitive" },
       }),
       ...(isActive !== undefined && {
-        isActive: isActive === 'true',
+        isActive: isActive === "true",
       }),
     };
 
     const orderByField =
       sortBy === CategorySortField.NAME
-        ? 'name'
+        ? "name"
         : sortBy === CategorySortField.CREATED_AT
-          ? 'createdAt'
-          : 'displayOrder';
+          ? "createdAt"
+          : "displayOrder";
 
     const [categories, total] = await Promise.all([
       this.prisma.serviceCategory.findMany({

@@ -3,11 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { DirectBookingDto } from './dtos/direct-booking.dto';
-import { BookingQueryDto, BookingSortField } from './dtos/booking-query.dto';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
+import { PrismaService } from "src/prisma/prisma.service";
+import { DirectBookingDto } from "./dtos/direct-booking.dto";
+import { BookingQueryDto, BookingSortField } from "./dtos/booking-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   JobStatus,
@@ -19,10 +20,12 @@ import {
   VerificationStatus,
   CancellationType,
   NotificationType,
-} from 'generated/prisma/client';
-import { NotificationsService } from '../notifications/notifications.service';
-import { PenaltiesService } from '../penalties/penalties.service';
-import { WalletService } from '../wallet/wallet.service';
+} from "generated/prisma/client";
+import { NotificationsService } from "../notifications/notifications.service";
+import { PenaltiesService } from "../penalties/penalties.service";
+import { WalletService } from "../wallet/wallet.service";
+import { RankingService } from "../ranking/ranking.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
 @Injectable()
 export class BookingService {
@@ -32,6 +35,8 @@ export class BookingService {
     private readonly notifications: NotificationsService,
     private readonly penalties: PenaltiesService,
     private readonly wallet: WalletService,
+    private readonly ranking: RankingService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ─── Direct Booking ──────────────────────────────────────────────────
@@ -55,7 +60,7 @@ export class BookingService {
       !provider.profileCompleted ||
       !provider.isActive
     ) {
-      throw new BadRequestException('Provider is not available');
+      throw new BadRequestException("Provider is not available");
     }
 
     // Validate provider has the selected category
@@ -63,7 +68,7 @@ export class BookingService {
       provider.providerProfile?.categories.map((c) => c.categoryId) || [];
     if (!providerCategoryIds.includes(dto.categoryId)) {
       throw new BadRequestException(
-        'Provider does not offer the selected service category',
+        "Provider does not offer the selected service category",
       );
     }
 
@@ -72,7 +77,7 @@ export class BookingService {
       where: { id: dto.categoryId },
     });
     if (!category || !category.isActive) {
-      throw new BadRequestException('Invalid or inactive category');
+      throw new BadRequestException("Invalid or inactive category");
     }
 
     // Create job, booking, and timeline in transaction
@@ -112,16 +117,16 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: job.id,
-          event: 'JOB_CREATED',
-          description: 'Job posted for direct booking',
+          event: "JOB_CREATED",
+          description: "Job posted for direct booking",
         },
       });
 
       await tx.jobTimeline.create({
         data: {
           jobId: job.id,
-          event: 'PROVIDER_REQUESTED',
-          description: 'Customer requested this provider directly',
+          event: "PROVIDER_REQUESTED",
+          description: "Customer requested this provider directly",
         },
       });
 
@@ -129,7 +134,7 @@ export class BookingService {
     });
 
     this.logger.log({
-      message: 'Direct booking created',
+      message: "Direct booking created",
       jobId: result.job.id,
       bookingId: result.booking.id,
       customerId,
@@ -142,9 +147,9 @@ export class BookingService {
     void this.notifications.send({
       userId: dto.providerId,
       type: NotificationType.BOOKING_REQUESTED,
-      title: 'New booking request 📅',
+      title: "New booking request 📅",
       message: `A customer requested you for "${dto.title}" (Rs. ${dto.totalAmount}). Accept or decline.`,
-      relatedEntityType: 'BOOKING',
+      relatedEntityType: "BOOKING",
       relatedEntityId: result.booking.id,
     });
 
@@ -168,9 +173,11 @@ export class BookingService {
       include: { job: true },
     });
 
-    if (!booking) throw new NotFoundException('Booking not found');
+    if (!booking) throw new NotFoundException("Booking not found");
     if (booking.providerId !== providerId) {
-      throw new ForbiddenException('You can only respond to your own booking requests');
+      throw new ForbiddenException(
+        "You can only respond to your own booking requests",
+      );
     }
     if (booking.status !== BookingStatus.PENDING) {
       throw new BadRequestException(
@@ -190,24 +197,40 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: 'PROVIDER_ASSIGNED',
-          description: 'Provider accepted the booking request',
+          event: "PROVIDER_ASSIGNED",
+          description: "Provider accepted the booking request",
         },
       });
       return updated;
     });
 
+    // Module 20 realtime: urgent jobs broadcast acceptance to customer + the
+    // assigned provider (after the transaction commits).
+    if (booking.job.isUrgent) {
+      void this.realtime.publishUrgentJobAccepted(
+        booking.customerId,
+        providerId,
+        {
+          jobId: booking.jobId,
+          bookingId,
+          title: booking.job.title,
+          isUrgent: true,
+          acceptedAt: new Date(),
+        },
+      );
+    }
+
     void this.notifications.send({
       userId: booking.customerId,
       type: NotificationType.BOOKING_CONFIRMED,
-      title: 'Booking confirmed ✅',
+      title: "Booking confirmed ✅",
       message: `Your provider accepted "${booking.job.title}".`,
-      relatedEntityType: 'BOOKING',
+      relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
     this.logger.log({
-      message: 'Direct booking accepted',
+      message: "Direct booking accepted",
       bookingId,
       jobId: booking.jobId,
       providerId,
@@ -220,15 +243,21 @@ export class BookingService {
    * Declines a direct booking. The job returns to the open pool rather than
    * being cancelled, so the customer can pick someone else or take bids.
    */
-  async declineBookingRequest(providerId: string, bookingId: string, reason?: string) {
+  async declineBookingRequest(
+    providerId: string,
+    bookingId: string,
+    reason?: string,
+  ) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: { job: true },
     });
 
-    if (!booking) throw new NotFoundException('Booking not found');
+    if (!booking) throw new NotFoundException("Booking not found");
     if (booking.providerId !== providerId) {
-      throw new ForbiddenException('You can only respond to your own booking requests');
+      throw new ForbiddenException(
+        "You can only respond to your own booking requests",
+      );
     }
     if (booking.status !== BookingStatus.PENDING) {
       throw new BadRequestException(
@@ -248,10 +277,10 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: 'PROVIDER_DECLINED',
+          event: "PROVIDER_DECLINED",
           description: reason
             ? `Provider declined the request: ${reason}`
-            : 'Provider declined the request',
+            : "Provider declined the request",
         },
       });
       return updated;
@@ -260,14 +289,14 @@ export class BookingService {
     void this.notifications.send({
       userId: booking.customerId,
       type: NotificationType.JOB_CANCELLED,
-      title: 'Provider declined',
+      title: "Provider declined",
       message: `Your request for "${booking.job.title}" was declined. The job is open for other providers.`,
-      relatedEntityType: 'JOB',
+      relatedEntityType: "JOB",
       relatedEntityId: booking.jobId,
     });
 
     this.logger.log({
-      message: 'Direct booking declined',
+      message: "Direct booking declined",
       bookingId,
       jobId: booking.jobId,
       providerId,
@@ -283,11 +312,11 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.providerId !== providerId) {
-      throw new ForbiddenException('You can only start your own assigned jobs');
+      throw new ForbiddenException("You can only start your own assigned jobs");
     }
 
     if (booking.status !== BookingStatus.ACCEPTED) {
@@ -322,8 +351,8 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: 'WORK_STARTED',
-          description: 'Provider started work',
+          event: "WORK_STARTED",
+          description: "Provider started work",
         },
       });
 
@@ -331,7 +360,7 @@ export class BookingService {
     });
 
     this.logger.log({
-      message: 'Work started',
+      message: "Work started",
       bookingId,
       jobId: booking.jobId,
       providerId,
@@ -341,9 +370,9 @@ export class BookingService {
     void this.notifications.send({
       userId: booking.customerId,
       type: NotificationType.JOB_STARTED,
-      title: 'Work has started 🛠️',
-      message: 'The provider has started work on your job.',
-      relatedEntityType: 'BOOKING',
+      title: "Work has started 🛠️",
+      message: "The provider has started work on your job.",
+      relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
@@ -359,12 +388,12 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.providerId !== providerId) {
       throw new ForbiddenException(
-        'You can only mark your own assigned jobs as completed',
+        "You can only mark your own assigned jobs as completed",
       );
     }
 
@@ -399,27 +428,27 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: 'WORK_COMPLETED',
-          description: 'Provider marked work as completed',
+          event: "WORK_COMPLETED",
+          description: "Provider marked work as completed",
         },
       });
 
       // Emit placeholder for wallet module (Module 14)
       this.logger.log({
-        message: 'WALLET_EVENT: Payment pending',
+        message: "WALLET_EVENT: Payment pending",
         bookingId,
         jobId: booking.jobId,
         customerId: booking.customerId,
         providerId,
         amount: booking.totalAmount.toNumber(),
-        eventType: 'PAYMENT_RELEASE',
+        eventType: "PAYMENT_RELEASE",
       });
 
       return updatedBooking;
     });
 
     this.logger.log({
-      message: 'Job completed',
+      message: "Job completed",
       bookingId,
       jobId: booking.jobId,
       providerId,
@@ -429,9 +458,9 @@ export class BookingService {
     void this.notifications.send({
       userId: booking.customerId,
       type: NotificationType.JOB_COMPLETED,
-      title: 'Job completed ✅',
-      message: 'The provider marked your job as completed. Please confirm.',
-      relatedEntityType: 'BOOKING',
+      title: "Job completed ✅",
+      message: "The provider marked your job as completed. Please confirm.",
+      relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
@@ -447,18 +476,18 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.customerId !== customerId) {
       throw new ForbiddenException(
-        'You can only confirm completion for your own bookings',
+        "You can only confirm completion for your own bookings",
       );
     }
 
     if (booking.job.status !== JobStatus.COMPLETED) {
       throw new BadRequestException(
-        'Provider must mark the job as completed first',
+        "Provider must mark the job as completed first",
       );
     }
 
@@ -485,30 +514,46 @@ export class BookingService {
     // Record timeline
     await this.recordJobTimeline(
       booking.jobId,
-      'CUSTOMER_CONFIRMED',
-      'Customer confirmed job completion',
+      "CUSTOMER_CONFIRMED",
+      "Customer confirmed job completion",
     );
 
+    // Module 21 realtime: completion confirmations move several analytics
+    // metrics (revenue, provider earnings, rankings) — nudge admin dashboards.
+    void this.realtime.publishAnalyticsUpdated("job_completion_confirmed");
+
     this.logger.log({
-      message: 'Customer confirmed completion',
+      message: "Customer confirmed completion",
       bookingId,
       jobId: booking.jobId,
       customerId,
     });
 
+    // Module 19: a confirmed completion adds to the provider's completed-job
+    // count and may move their rank (fire-and-forget, never blocks payment).
+    void this.ranking
+      .evaluateProviderRank(booking.providerId, "Job completion confirmed")
+      .catch((err) => {
+        const error = err as { message?: string };
+        this.logger.error(
+          { err: error, providerId: booking.providerId },
+          "Rank evaluation failed after job completion",
+        );
+      });
+
     // Notify the provider that completion was confirmed
     void this.notifications.send({
       userId: booking.providerId,
       type: NotificationType.COMPLETION_CONFIRMED,
-      title: 'Completion confirmed 🙌',
+      title: "Completion confirmed 🙌",
       message:
-        'The customer confirmed your completed job. Payment will be released.',
-      relatedEntityType: 'BOOKING',
+        "The customer confirmed your completed job. Payment will be released.",
+      relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
     return {
-      message: 'Job completion confirmed successfully',
+      message: "Job completion confirmed successfully",
       bookingId,
       jobId: booking.jobId,
     };
@@ -523,16 +568,16 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.customerId !== customerId) {
-      throw new ForbiddenException('You can only cancel your own bookings');
+      throw new ForbiddenException("You can only cancel your own bookings");
     }
 
     if (booking.status !== BookingStatus.ACCEPTED) {
       throw new BadRequestException(
-        'Bookings can only be cancelled before work starts',
+        "Bookings can only be cancelled before work starts",
       );
     }
 
@@ -557,9 +602,9 @@ export class BookingService {
         data: {
           jobId: booking.jobId,
           bookingId,
-          cancelledBy: 'CUSTOMER',
+          cancelledBy: "CUSTOMER",
           cancellationType: CancellationType.CUSTOMER,
-          reason: reason || 'Cancelled by customer before work started',
+          reason: reason || "Cancelled by customer before work started",
         },
       });
 
@@ -567,8 +612,8 @@ export class BookingService {
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: 'BOOKING_CANCELLED',
-          description: 'Booking cancelled by customer',
+          event: "BOOKING_CANCELLED",
+          description: "Booking cancelled by customer",
         },
       });
 
@@ -576,7 +621,7 @@ export class BookingService {
     });
 
     this.logger.log({
-      message: 'Booking cancelled',
+      message: "Booking cancelled",
       bookingId,
       jobId: booking.jobId,
       customerId,
@@ -587,9 +632,9 @@ export class BookingService {
     void this.notifications.send({
       userId: booking.providerId,
       type: NotificationType.JOB_CANCELLED,
-      title: 'Booking cancelled',
-      message: 'The customer cancelled the booking before work started.',
-      relatedEntityType: 'BOOKING',
+      title: "Booking cancelled",
+      message: "The customer cancelled the booking before work started.",
+      relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
@@ -609,18 +654,18 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.providerId !== providerId) {
       throw new ForbiddenException(
-        'You can only cancel your own assigned bookings',
+        "You can only cancel your own assigned bookings",
       );
     }
 
     if (booking.status !== BookingStatus.ACCEPTED) {
       throw new BadRequestException(
-        'Bookings can only be cancelled before work starts',
+        "Bookings can only be cancelled before work starts",
       );
     }
 
@@ -648,17 +693,17 @@ export class BookingService {
         data: {
           jobId: booking.jobId,
           bookingId,
-          cancelledBy: 'PROVIDER',
+          cancelledBy: "PROVIDER",
           cancellationType: CancellationType.PROVIDER,
-          reason: reason || 'Cancelled by provider before work started',
+          reason: reason || "Cancelled by provider before work started",
         },
       });
 
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: 'BOOKING_CANCELLED',
-          description: 'Booking cancelled by provider',
+          event: "BOOKING_CANCELLED",
+          description: "Booking cancelled by provider",
         },
       });
 
@@ -666,7 +711,7 @@ export class BookingService {
     });
 
     this.logger.log({
-      message: 'Booking cancelled by provider',
+      message: "Booking cancelled by provider",
       bookingId,
       jobId: booking.jobId,
       providerId,
@@ -677,9 +722,9 @@ export class BookingService {
     void this.notifications.send({
       userId: booking.customerId,
       type: NotificationType.JOB_CANCELLED,
-      title: 'Booking cancelled',
-      message: 'The provider cancelled the booking before work started.',
-      relatedEntityType: 'BOOKING',
+      title: "Booking cancelled",
+      message: "The provider cancelled the booking before work started.",
+      relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
@@ -688,7 +733,7 @@ export class BookingService {
     await this.penalties.evaluateProviderCancellation(
       providerId,
       result.cancellation.id,
-      reason || 'Cancelled by provider before work started',
+      reason || "Cancelled by provider before work started",
     );
 
     return result.cancelledBooking;
@@ -705,7 +750,7 @@ export class BookingService {
       dateFrom,
       dateTo,
       sortBy = BookingSortField.CREATED_AT,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
 
     const skip = (page - 1) * limit;
@@ -717,7 +762,7 @@ export class BookingService {
         ? {
             createdAt: {
               ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-              ...(dateTo ? { lte: new Date(dateTo + 'T23:59:59Z') } : {}),
+              ...(dateTo ? { lte: new Date(dateTo + "T23:59:59Z") } : {}),
             },
           }
         : {}),
@@ -725,7 +770,7 @@ export class BookingService {
     };
 
     const orderByField =
-      sortBy === BookingSortField.TOTAL_AMOUNT ? 'totalAmount' : 'createdAt';
+      sortBy === BookingSortField.TOTAL_AMOUNT ? "totalAmount" : "createdAt";
 
     const [bookings, total] = await Promise.all([
       this.prisma.booking.findMany({
@@ -786,7 +831,7 @@ export class BookingService {
       dateFrom,
       dateTo,
       sortBy = BookingSortField.CREATED_AT,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
 
     const skip = (page - 1) * limit;
@@ -798,7 +843,7 @@ export class BookingService {
         ? {
             createdAt: {
               ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-              ...(dateTo ? { lte: new Date(dateTo + 'T23:59:59Z') } : {}),
+              ...(dateTo ? { lte: new Date(dateTo + "T23:59:59Z") } : {}),
             },
           }
         : {}),
@@ -806,7 +851,7 @@ export class BookingService {
     };
 
     const orderByField =
-      sortBy === BookingSortField.TOTAL_AMOUNT ? 'totalAmount' : 'createdAt';
+      sortBy === BookingSortField.TOTAL_AMOUNT ? "totalAmount" : "createdAt";
 
     const [bookings, total] = await Promise.all([
       this.prisma.booking.findMany({
@@ -893,7 +938,7 @@ export class BookingService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     // Authorization: must be customer, assigned provider, or admin
@@ -903,7 +948,7 @@ export class BookingService {
         select: { role: true },
       });
       if (user?.role !== UserRole.ADMIN) {
-        throw new ForbiddenException('Access denied');
+        throw new ForbiddenException("Access denied");
       }
     }
 
@@ -923,14 +968,14 @@ export class BookingService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     // Find the most recent non-cancelled booking to check provider access
     const activeBooking = await this.prisma.booking.findFirst({
       where: {
         jobId,
-        status: { notIn: ['CANCELLED'] },
+        status: { notIn: ["CANCELLED"] },
       },
       select: { providerId: true },
     });
@@ -945,13 +990,13 @@ export class BookingService {
         select: { role: true },
       });
       if (user?.role !== UserRole.ADMIN) {
-        throw new ForbiddenException('Access denied');
+        throw new ForbiddenException("Access denied");
       }
     }
 
     const timeline = await this.prisma.jobTimeline.findMany({
       where: { jobId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
 
     const booking = await this.prisma.booking.findFirst({
@@ -1005,7 +1050,7 @@ export class BookingService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return bookings;
@@ -1042,7 +1087,7 @@ export class BookingService {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return bookings;
@@ -1127,7 +1172,7 @@ export class BookingService {
       providerId,
       cityId,
       sortBy = BookingSortField.CREATED_AT,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
 
     const skip = (page - 1) * limit;
@@ -1138,7 +1183,7 @@ export class BookingService {
         ? {
             createdAt: {
               ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-              ...(dateTo ? { lte: new Date(dateTo + 'T23:59:59Z') } : {}),
+              ...(dateTo ? { lte: new Date(dateTo + "T23:59:59Z") } : {}),
             },
           }
         : {}),
@@ -1147,7 +1192,7 @@ export class BookingService {
         ? {
             OR: [
               { id: search },
-              { job: { title: { contains: search, mode: 'insensitive' } } },
+              { job: { title: { contains: search, mode: "insensitive" } } },
             ],
           }
         : {}),
@@ -1157,7 +1202,7 @@ export class BookingService {
     };
 
     const orderByField =
-      sortBy === BookingSortField.TOTAL_AMOUNT ? 'totalAmount' : 'createdAt';
+      sortBy === BookingSortField.TOTAL_AMOUNT ? "totalAmount" : "createdAt";
 
     const [bookings, total] = await Promise.all([
       this.prisma.booking.findMany({
@@ -1208,26 +1253,33 @@ export class BookingService {
         reviews: true,
         cancellationRecords: true,
         conversations: {
-          include: { messages: { orderBy: { createdAt: 'asc' } } },
+          include: { messages: { orderBy: { createdAt: "asc" } } },
         },
       },
     });
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
     return booking;
   }
 
   // ─── Expired Job Cleanup ─────────────────────────────────────────────
 
+  /**
+   * Module 20: jobs (urgent or normal) must expire on their own — this runs
+   * every 15 minutes so a 6-hour urgent job never lingers in feeds. Uses the
+   * existing expiresAt-driven mechanism; the admin endpoint can still trigger
+   * it manually.
+   */
+  @Cron("*/15 * * * *")
   async expireOverdueJobs(): Promise<number> {
     // Find jobs that have no active (non-cancelled) booking
     const jobsWithActiveBooking = await this.prisma.booking.findMany({
       where: {
-        status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] },
+        status: { notIn: ["CANCELLED", "COMPLETED", "DISPUTED"] },
       },
       select: { jobId: true },
-      distinct: ['jobId'],
+      distinct: ["jobId"],
     });
 
     const jobIdsWithActiveBooking = jobsWithActiveBooking.map((b) => b.jobId);
@@ -1246,17 +1298,28 @@ export class BookingService {
       const expiredJobs = await this.prisma.job.findMany({
         where: {
           status: JobStatus.EXPIRED,
-          timeline: { none: { event: 'JOB_EXPIRED' } },
+          timeline: { none: { event: "JOB_EXPIRED" } },
         },
-        select: { id: true },
+        select: { id: true, title: true, customerId: true, isUrgent: true },
       });
 
       for (const job of expiredJobs) {
         await this.recordJobTimeline(
           job.id,
-          'JOB_EXPIRED',
-          'Job expired due to no provider selection',
+          "JOB_EXPIRED",
+          "Job expired due to no provider selection",
         );
+
+        // Module 20 realtime: urgent jobs get a dedicated expired event on
+        // the owner's private channel (after the status change commits).
+        if (job.isUrgent) {
+          void this.realtime.publishUrgentJobExpired(job.customerId, {
+            jobId: job.id,
+            title: job.title,
+            isUrgent: true,
+            expiredAt: new Date(),
+          });
+        }
       }
 
       // Expire all pending bids for these jobs
@@ -1264,14 +1327,14 @@ export class BookingService {
         await this.prisma.bid.updateMany({
           where: {
             jobId: job.id,
-            status: 'PENDING',
+            status: "PENDING",
           },
-          data: { status: 'EXPIRED' },
+          data: { status: "EXPIRED" },
         });
       }
 
       this.logger.log({
-        message: 'Expired overdue jobs',
+        message: "Expired overdue jobs",
         count: result.count,
       });
     }
@@ -1310,16 +1373,16 @@ export class BookingService {
     }
 
     return {
-      jobCreated: events['JOB_CREATED'] || null,
-      firstBid: events['BID_RECEIVED'] || null,
-      bidAccepted: events['BID_ACCEPTED'] || null,
+      jobCreated: events["JOB_CREATED"] || null,
+      firstBid: events["BID_RECEIVED"] || null,
+      bidAccepted: events["BID_ACCEPTED"] || null,
       providerAssigned:
-        events['PROVIDER_ASSIGNED'] || events['PROVIDER_ACCEPTED'] || null,
-      workStarted: events['WORK_STARTED'] || null,
-      workCompleted: events['WORK_COMPLETED'] || null,
-      customerConfirmed: events['CUSTOMER_CONFIRMED'] || null,
-      cancelled: events['BOOKING_CANCELLED'] || null,
-      expired: events['JOB_EXPIRED'] || null,
+        events["PROVIDER_ASSIGNED"] || events["PROVIDER_ACCEPTED"] || null,
+      workStarted: events["WORK_STARTED"] || null,
+      workCompleted: events["WORK_COMPLETED"] || null,
+      customerConfirmed: events["CUSTOMER_CONFIRMED"] || null,
+      cancelled: events["BOOKING_CANCELLED"] || null,
+      expired: events["JOB_EXPIRED"] || null,
       currentJobStatus: currentStatus,
       currentBookingStatus: booking?.status || null,
     };

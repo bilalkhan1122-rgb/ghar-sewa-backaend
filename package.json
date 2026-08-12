@@ -55,13 +55,16 @@
     "express-basic-auth": "^1.2.1",
     "file-type": "^21.3.4",
     "firebase-admin": "^14.2.0",
+    "google-auth-library": "^11.0.1",
     "helmet": "^8.1.0",
     "libphonenumber-js": "^1.12.26",
     "multer": "^2.0.2",
     "nestjs-pino": "^4.4.1",
     "pino-http": "^10.5.0",
     "pino-pretty": "^13.1.2",
+    "pusher": "^5.3.4",
     "reflect-metadata": "^0.2.2",
+    "resend": "^6.19.0",
     "rxjs": "^7.8.1",
     "sharp": "^0.35.3",
     "socket.io": "^4.8.3",
@@ -103,6 +106,10 @@
       "ts"
     ],
     "rootDir": "src",
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1",
+      "^generated/(.*)$": "<rootDir>/../generated/$1"
+    },
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

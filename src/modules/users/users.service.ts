@@ -3,12 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { UpdateCustomerProfileDto } from './dtos/update-customer-profile.dto';
-import { User } from 'generated/prisma/client';
-import { UpdateUserDto } from './dtos/update-user.dto';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { UpdateCustomerProfileDto } from "./dtos/update-customer-profile.dto";
+import { User } from "generated/prisma/client";
+import { UpdateUserDto } from "./dtos/update-user.dto";
 
 @Injectable()
 export class UsersService {
@@ -28,29 +28,38 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return this.sanitizeUser(user);
   }
 
-  async updateProfile(userId: string, updateProfileDto: UpdateCustomerProfileDto) {
+  async updateProfile(
+    userId: string,
+    updateProfileDto: UpdateCustomerProfileDto,
+  ) {
     // Validate city if provided
     if (updateProfileDto.cityId) {
       const city = await this.prisma.city.findUnique({
         where: { id: updateProfileDto.cityId },
       });
       if (!city) {
-        throw new BadRequestException('City not found');
+        throw new BadRequestException("City not found");
       }
     }
 
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
-        ...(updateProfileDto.fullName !== undefined && { fullName: updateProfileDto.fullName }),
-        ...(updateProfileDto.cityId !== undefined && { cityId: updateProfileDto.cityId }),
-        ...(updateProfileDto.address !== undefined && { address: updateProfileDto.address }),
+        ...(updateProfileDto.fullName !== undefined && {
+          fullName: updateProfileDto.fullName,
+        }),
+        ...(updateProfileDto.cityId !== undefined && {
+          cityId: updateProfileDto.cityId,
+        }),
+        ...(updateProfileDto.address !== undefined && {
+          address: updateProfileDto.address,
+        }),
       },
       include: { city: true },
     });
@@ -66,13 +75,13 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     const fileUrl = await this.fileUpload.replaceFile(
       user.profilePhoto,
       file,
-      'profiles',
+      "profiles",
     );
 
     await this.prisma.user.update({
@@ -96,14 +105,14 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Pending transactions (from bookings with ACTIVE or PENDING status)
     const pendingBookings = await this.prisma.booking.findMany({
       where: {
         customerId: userId,
-        status: { in: ['ACCEPTED', 'IN_PROGRESS'] },
+        status: { in: ["ACCEPTED", "IN_PROGRESS"] },
       },
       select: {
         id: true,
@@ -129,7 +138,7 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     const [
@@ -142,19 +151,19 @@ export class UsersService {
     ] = await Promise.all([
       this.prisma.booking.count({ where: { customerId: userId } }),
       this.prisma.booking.count({
-        where: { customerId: userId, status: 'ACCEPTED' },
+        where: { customerId: userId, status: "ACCEPTED" },
       }),
       this.prisma.booking.count({
-        where: { customerId: userId, status: 'IN_PROGRESS' },
+        where: { customerId: userId, status: "IN_PROGRESS" },
       }),
       this.prisma.booking.count({
-        where: { customerId: userId, status: 'COMPLETED' },
+        where: { customerId: userId, status: "COMPLETED" },
       }),
       this.prisma.booking.count({
-        where: { customerId: userId, status: 'CANCELLED' },
+        where: { customerId: userId, status: "CANCELLED" },
       }),
       this.prisma.booking.count({
-        where: { customerId: userId, status: 'DISPUTED' },
+        where: { customerId: userId, status: "DISPUTED" },
       }),
     ]);
 
@@ -176,7 +185,7 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Mark account as deleted
@@ -193,7 +202,9 @@ export class UsersService {
       where: { userId },
     });
 
-    return { message: 'Account deleted successfully. Your data has been preserved.' };
+    return {
+      message: "Account deleted successfully. Your data has been preserved.",
+    };
   }
 
   // ─── Admin Methods ───────────────────────────────────────────────────
@@ -206,7 +217,7 @@ export class UsersService {
         where: { isActive: true },
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { city: true },
       }),
       this.prisma.user.count({ where: { isActive: true } }),
@@ -262,7 +273,7 @@ export class UsersService {
       where: { userId },
     });
 
-    return { message: 'User deleted successfully' };
+    return { message: "User deleted successfully" };
   }
 
   // ─── Utils ───────────────────────────────────────────────────────────

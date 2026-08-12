@@ -4,17 +4,17 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { WalletService } from '../wallet/wallet.service';
-import { RaiseDisputeDto } from './dtos/raise-dispute.dto';
-import { DisputeQueryDto } from './dtos/dispute-query.dto';
-import { RespondDisputeDto } from './dtos/respond-dispute.dto';
-import { ResolveDisputeDto } from './dtos/resolve-dispute.dto';
-import { UpdateDisputeStatusDto } from './dtos/update-dispute-status.dto';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { WalletService } from "../wallet/wallet.service";
+import { RaiseDisputeDto } from "./dtos/raise-dispute.dto";
+import { DisputeQueryDto } from "./dtos/dispute-query.dto";
+import { RespondDisputeDto } from "./dtos/respond-dispute.dto";
+import { ResolveDisputeDto } from "./dtos/resolve-dispute.dto";
+import { UpdateDisputeStatusDto } from "./dtos/update-dispute-status.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   UserRole,
@@ -24,7 +24,7 @@ import {
   DisputeResolution,
   DisputeEvidenceType,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /** Disputes may only be raised within 48h of customer confirmation. */
 export const DISPUTE_WINDOW_HOURS = 48;
@@ -32,12 +32,12 @@ export const DISPUTE_WINDOW_HOURS = 48;
 export const MAX_DISPUTE_EVIDENCE = 5;
 
 export const DISPUTE_TIMELINE_ACTIONS = {
-  OPENED: 'DISPUTE_OPENED',
-  EVIDENCE_UPLOADED: 'EVIDENCE_UPLOADED',
-  RESPONSE_SUBMITTED: 'RESPONSE_SUBMITTED',
-  STATUS_CHANGED: 'STATUS_CHANGED',
-  RESOLUTION_APPLIED: 'RESOLUTION_APPLIED',
-  REJECTED: 'DISPUTE_REJECTED',
+  OPENED: "DISPUTE_OPENED",
+  EVIDENCE_UPLOADED: "EVIDENCE_UPLOADED",
+  RESPONSE_SUBMITTED: "RESPONSE_SUBMITTED",
+  STATUS_CHANGED: "STATUS_CHANGED",
+  RESOLUTION_APPLIED: "RESOLUTION_APPLIED",
+  REJECTED: "DISPUTE_REJECTED",
 } as const;
 
 const ACTIVE_DISPUTE_STATUSES = [
@@ -65,14 +65,14 @@ export class DisputesService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     // Only the customer or the assigned provider may raise a dispute
     const isCustomer = booking.customerId === userId;
     const isProvider = booking.providerId === userId;
     if (!isCustomer && !isProvider) {
-      throw new ForbiddenException('You are not part of this booking');
+      throw new ForbiddenException("You are not part of this booking");
     }
 
     if (booking.status !== BookingStatus.COMPLETED) {
@@ -85,7 +85,7 @@ export class DisputesService {
     const anchor = booking.confirmedAt ?? booking.completedAt;
     if (!anchor) {
       throw new BadRequestException(
-        'Job must be completed and confirmed before a dispute can be raised',
+        "Job must be completed and confirmed before a dispute can be raised",
       );
     }
     const windowEnd = new Date(
@@ -102,7 +102,7 @@ export class DisputesService {
       where: { bookingId: booking.id, status: { in: ACTIVE_DISPUTE_STATUSES } },
     });
     if (activeDispute) {
-      throw new ConflictException('This booking already has an active dispute');
+      throw new ConflictException("This booking already has an active dispute");
     }
 
     const opponentId = isCustomer ? booking.providerId : booking.customerId;
@@ -125,7 +125,7 @@ export class DisputesService {
           disputeId: created.id,
           actorId: userId,
           action: DISPUTE_TIMELINE_ACTIONS.OPENED,
-          description: `Dispute opened by ${isCustomer ? 'customer' : 'provider'}: ${dto.reason}`,
+          description: `Dispute opened by ${isCustomer ? "customer" : "provider"}: ${dto.reason}`,
         },
       });
 
@@ -143,7 +143,7 @@ export class DisputesService {
     });
 
     this.logger.log({
-      message: 'Dispute raised',
+      message: "Dispute raised",
       disputeId: dispute.id,
       bookingId: booking.id,
       jobId: booking.jobId,
@@ -154,9 +154,9 @@ export class DisputesService {
     void this.notifications.send({
       userId: opponentId,
       type: NotificationType.DISPUTE_RAISED,
-      title: 'Dispute raised ⚖️',
+      title: "Dispute raised ⚖️",
       message: `A dispute has been raised on booking #${booking.id.slice(0, 8)}. Reason: ${dto.reason}`,
-      relatedEntityType: 'DISPUTE',
+      relatedEntityType: "DISPUTE",
       relatedEntityId: dispute.id,
     });
 
@@ -177,7 +177,7 @@ export class DisputesService {
       dispute.status === DisputeStatus.REJECTED
     ) {
       throw new BadRequestException(
-        'Evidence cannot be uploaded after the dispute is closed',
+        "Evidence cannot be uploaded after the dispute is closed",
       );
     }
 
@@ -223,14 +223,14 @@ export class DisputesService {
     void this.notifications.send({
       userId: dispute.opponentId,
       type: NotificationType.DISPUTE_RESPONSE_RECEIVED,
-      title: 'New evidence submitted 📎',
-      message: 'The other party submitted new evidence to a dispute.',
-      relatedEntityType: 'DISPUTE',
+      title: "New evidence submitted 📎",
+      message: "The other party submitted new evidence to a dispute.",
+      relatedEntityType: "DISPUTE",
       relatedEntityId: disputeId,
     });
 
     this.logger.log({
-      message: 'Dispute evidence uploaded',
+      message: "Dispute evidence uploaded",
       disputeId,
       evidenceId: evidence.id,
       uploaderId: userId,
@@ -263,7 +263,7 @@ export class DisputesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           booking: { select: { id: true, totalAmount: true, status: true } },
           job: { select: { id: true, title: true, status: true } },
@@ -299,7 +299,7 @@ export class DisputesService {
       dispute.status === DisputeStatus.REJECTED
     ) {
       throw new BadRequestException(
-        'Responses cannot be submitted after the dispute is closed',
+        "Responses cannot be submitted after the dispute is closed",
       );
     }
 
@@ -316,14 +316,14 @@ export class DisputesService {
     void this.notifications.send({
       userId: dispute.opponentId,
       type: NotificationType.DISPUTE_RESPONSE_RECEIVED,
-      title: 'New response submitted 💬',
-      message: 'The other party submitted a response to the dispute.',
-      relatedEntityType: 'DISPUTE',
+      title: "New response submitted 💬",
+      message: "The other party submitted a response to the dispute.",
+      relatedEntityType: "DISPUTE",
       relatedEntityId: disputeId,
     });
 
     this.logger.log({
-      message: 'Dispute response submitted',
+      message: "Dispute response submitted",
       disputeId,
       responderId: userId,
     });
@@ -338,7 +338,7 @@ export class DisputesService {
 
     return this.prisma.disputeTimeline.findMany({
       where: { disputeId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       include: {
         actor: { select: { id: true, fullName: true, role: true } },
       },
@@ -360,7 +360,7 @@ export class DisputesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           booking: { select: { id: true, totalAmount: true, status: true } },
           job: { select: { id: true, title: true } },
@@ -398,7 +398,7 @@ export class DisputesService {
 
     return this.prisma.disputeEvidence.findMany({
       where: { disputeId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       include: {
         uploader: { select: { id: true, fullName: true, role: true } },
       },
@@ -410,7 +410,7 @@ export class DisputesService {
 
     return this.prisma.disputeTimeline.findMany({
       where: { disputeId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       include: {
         actor: { select: { id: true, fullName: true, role: true } },
       },
@@ -450,7 +450,7 @@ export class DisputesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           sender: { select: { id: true, fullName: true, role: true } },
         },
@@ -487,7 +487,7 @@ export class DisputesService {
       dispute.status === DisputeStatus.RESOLVED ||
       dispute.status === DisputeStatus.REJECTED
     ) {
-      throw new BadRequestException('Closed disputes cannot change status');
+      throw new BadRequestException("Closed disputes cannot change status");
     }
 
     if (
@@ -496,7 +496,7 @@ export class DisputesService {
       dto.status !== DisputeStatus.OPEN
     ) {
       throw new BadRequestException(
-        'Status can only be moved to OPEN, UNDER_REVIEW or WAITING_FOR_RESPONSE here',
+        "Status can only be moved to OPEN, UNDER_REVIEW or WAITING_FOR_RESPONSE here",
       );
     }
 
@@ -511,7 +511,7 @@ export class DisputesService {
           disputeId,
           actorId: adminId,
           action: DISPUTE_TIMELINE_ACTIONS.STATUS_CHANGED,
-          description: `Status changed to ${dto.status}${dto.note ? ` — ${dto.note}` : ''}`,
+          description: `Status changed to ${dto.status}${dto.note ? ` — ${dto.note}` : ""}`,
         },
       });
 
@@ -521,8 +521,8 @@ export class DisputesService {
     await this.notifyParties(
       disputeId,
       NotificationType.DISPUTE_STATUS_UPDATED,
-      'Dispute status updated 🔄',
-      `The dispute status has been updated to ${dto.status.replace('_', ' ')}.`,
+      "Dispute status updated 🔄",
+      `The dispute status has been updated to ${dto.status.replace("_", " ")}.`,
     );
 
     return updated;
@@ -541,7 +541,7 @@ export class DisputesService {
       dispute.status === DisputeStatus.RESOLVED ||
       dispute.status === DisputeStatus.REJECTED
     ) {
-      throw new BadRequestException('This dispute is already closed');
+      throw new BadRequestException("This dispute is already closed");
     }
 
     if (
@@ -550,7 +550,7 @@ export class DisputesService {
       dto.refundAmount === undefined
     ) {
       throw new BadRequestException(
-        'refundAmount is required for refund resolutions',
+        "refundAmount is required for refund resolutions",
       );
     }
 
@@ -565,7 +565,7 @@ export class DisputesService {
       });
       if (booking && dto.refundAmount > Number(booking.totalAmount)) {
         throw new BadRequestException(
-          'refundAmount cannot exceed the booking total amount',
+          "refundAmount cannot exceed the booking total amount",
         );
       }
     }
@@ -584,7 +584,7 @@ export class DisputesService {
         select: { customerId: true, providerId: true, totalAmount: true },
       });
       if (!booking) {
-        throw new NotFoundException('Booking not found');
+        throw new NotFoundException("Booking not found");
       }
 
       const refundAmount =
@@ -620,7 +620,7 @@ export class DisputesService {
           disputeId,
           actorId: adminId,
           action: DISPUTE_TIMELINE_ACTIONS.RESOLUTION_APPLIED,
-          description: `Resolved with ${dto.resolution}${dto.note ? ` — ${dto.note}` : ''}`,
+          description: `Resolved with ${dto.resolution}${dto.note ? ` — ${dto.note}` : ""}`,
         },
       });
 
@@ -652,29 +652,29 @@ export class DisputesService {
     // Refunds (if any) were processed by the wallet module above — the
     // remaining resolutions (REDO_WORK / NO_REFUND) involve no transfers.
     this.logger.log({
-      message: 'Dispute resolution applied',
+      message: "Dispute resolution applied",
       disputeId,
       bookingId: dispute.bookingId,
       resolution: dto.resolution,
       refundAmount: dto.refundAmount ?? null,
-      eventType: 'DISPUTE_RESOLVED',
+      eventType: "DISPUTE_RESOLVED",
     });
 
     await this.notifyParties(
       disputeId,
       NotificationType.DISPUTE_RESOLVED,
-      'Dispute resolved ✅',
-      `The dispute has been resolved with: ${dto.resolution.replace('_', ' ')}.`,
+      "Dispute resolved ✅",
+      `The dispute has been resolved with: ${dto.resolution.replace("_", " ")}.`,
     );
 
     this.logger.log({
-      message: 'Dispute resolved',
+      message: "Dispute resolved",
       disputeId,
       resolvedBy: adminId,
       resolution: dto.resolution,
     });
 
-    return { message: 'Dispute resolved', dispute: resolved };
+    return { message: "Dispute resolved", dispute: resolved };
   }
 
   // ─── Admin: Reject dispute ──────────────────────────────────────────
@@ -686,7 +686,7 @@ export class DisputesService {
       dispute.status === DisputeStatus.RESOLVED ||
       dispute.status === DisputeStatus.REJECTED
     ) {
-      throw new BadRequestException('This dispute is already closed');
+      throw new BadRequestException("This dispute is already closed");
     }
 
     const rejected = await this.prisma.$transaction(async (tx) => {
@@ -723,11 +723,11 @@ export class DisputesService {
     await this.notifyParties(
       disputeId,
       NotificationType.DISPUTE_REJECTED,
-      'Dispute rejected ❌',
+      "Dispute rejected ❌",
       `The dispute was rejected. Reason: ${reason}`,
     );
 
-    return { message: 'Dispute rejected', dispute: rejected };
+    return { message: "Dispute rejected", dispute: rejected };
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────
@@ -738,11 +738,11 @@ export class DisputesService {
     });
 
     if (!dispute) {
-      throw new NotFoundException('Dispute not found');
+      throw new NotFoundException("Dispute not found");
     }
 
     if (dispute.raisedById !== userId && dispute.opponentId !== userId) {
-      throw new ForbiddenException('You are not part of this dispute');
+      throw new ForbiddenException("You are not part of this dispute");
     }
 
     return dispute;
@@ -755,7 +755,7 @@ export class DisputesService {
     });
 
     if (!dispute) {
-      throw new NotFoundException('Dispute not found');
+      throw new NotFoundException("Dispute not found");
     }
 
     return dispute;
@@ -798,13 +798,13 @@ export class DisputesService {
         raisedBy: { select: { id: true, fullName: true, role: true } },
         opponent: { select: { id: true, fullName: true, role: true } },
         evidences: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: "asc" },
           include: {
             uploader: { select: { id: true, fullName: true, role: true } },
           },
         },
         timeline: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: "asc" },
           include: {
             actor: { select: { id: true, fullName: true, role: true } },
           },
@@ -813,7 +813,7 @@ export class DisputesService {
     });
 
     if (!dispute) {
-      throw new NotFoundException('Dispute not found');
+      throw new NotFoundException("Dispute not found");
     }
 
     return dispute;
@@ -838,7 +838,7 @@ export class DisputesService {
         type,
         title,
         message,
-        relatedEntityType: 'DISPUTE',
+        relatedEntityType: "DISPUTE",
         relatedEntityId: disputeId,
       },
       {
@@ -846,21 +846,21 @@ export class DisputesService {
         type,
         title,
         message,
-        relatedEntityType: 'DISPUTE',
+        relatedEntityType: "DISPUTE",
         relatedEntityId: disputeId,
       },
     ]);
   }
 
   private mapEvidenceType(mimeType: string): DisputeEvidenceType {
-    if (mimeType.startsWith('video/')) return DisputeEvidenceType.VIDEO;
-    if (mimeType === 'application/pdf') return DisputeEvidenceType.DOCUMENT;
+    if (mimeType.startsWith("video/")) return DisputeEvidenceType.VIDEO;
+    if (mimeType === "application/pdf") return DisputeEvidenceType.DOCUMENT;
     return DisputeEvidenceType.IMAGE;
   }
 
   assertAdminRole(role: UserRole): void {
     if (role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Admin access required');
+      throw new ForbiddenException("Admin access required");
     }
   }
 }

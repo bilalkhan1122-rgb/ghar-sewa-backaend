@@ -1,6 +1,7 @@
 import {
   IsString,
   IsNumber,
+  IsBoolean,
   IsOptional,
   MinLength,
   MaxLength,
@@ -8,21 +9,21 @@ import {
   Max,
   IsUUID,
   IsISO8601,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CreateJobDto {
   @ApiProperty({
-    description: 'Service category ID',
-    example: 'uuid-here',
+    description: "Service category ID",
+    example: "uuid-here",
   })
-  @IsUUID('4')
+  @IsUUID("4")
   categoryId: string;
 
   @ApiProperty({
-    description: 'Job title',
-    example: 'Fix leaking kitchen faucet',
+    description: "Job title",
+    example: "Fix leaking kitchen faucet",
     minLength: 5,
     maxLength: 200,
   })
@@ -32,9 +33,9 @@ export class CreateJobDto {
   title: string;
 
   @ApiProperty({
-    description: 'Detailed job description',
+    description: "Detailed job description",
     example:
-      'The kitchen sink faucet has been leaking for 2 days. Need a plumber to fix it ASAP.',
+      "The kitchen sink faucet has been leaking for 2 days. Need a plumber to fix it ASAP.",
     minLength: 20,
     maxLength: 5000,
   })
@@ -44,8 +45,8 @@ export class CreateJobDto {
   description: string;
 
   @ApiProperty({
-    description: 'Job address',
-    example: 'House #12, Street 5, Gulberg, Lahore',
+    description: "Job address",
+    example: "House #12, Street 5, Gulberg, Lahore",
     minLength: 5,
     maxLength: 500,
   })
@@ -55,7 +56,7 @@ export class CreateJobDto {
   address: string;
 
   @ApiProperty({
-    description: 'Latitude coordinate',
+    description: "Latitude coordinate",
     example: 31.5204,
     minimum: -90,
     maximum: 90,
@@ -67,7 +68,7 @@ export class CreateJobDto {
   latitude: number;
 
   @ApiProperty({
-    description: 'Longitude coordinate',
+    description: "Longitude coordinate",
     example: 74.3587,
     minimum: -180,
     maximum: 180,
@@ -79,7 +80,7 @@ export class CreateJobDto {
   longitude: number;
 
   @ApiProperty({
-    description: 'Offered price in PKR',
+    description: "Offered price in PKR",
     example: 1500,
     minimum: 1,
     maximum: 9999999,
@@ -91,20 +92,30 @@ export class CreateJobDto {
   offeredPrice: number;
 
   @ApiPropertyOptional({
-    description: 'Preferred schedule (ISO date)',
-    example: '2026-08-15T10:00:00Z',
+    description: "Preferred schedule (ISO date)",
+    example: "2026-08-15T10:00:00Z",
   })
   @IsOptional()
   @IsISO8601()
   preferredSchedule?: string;
 
   @ApiPropertyOptional({
-    description: 'Additional notes for the provider',
-    example: 'Please bring your own tools',
+    description: "Additional notes for the provider",
+    example: "Please bring your own tools",
     maxLength: 1000,
   })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   additionalNotes?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Mark the job as urgent (Module 20). Urgent jobs expire in 6 hours instead of 24 and appear first in the provider feed.",
+    example: true,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isUrgent?: boolean;
 }

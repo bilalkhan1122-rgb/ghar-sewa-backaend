@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getMessaging, Message } from 'firebase-admin/messaging';
-import { ServiceAccount } from 'firebase-admin/app';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { initializeApp, cert } from "firebase-admin/app";
+import { getMessaging, Message } from "firebase-admin/messaging";
+import { ServiceAccount } from "firebase-admin/app";
 
 export interface PushPayload {
   title: string;
@@ -42,10 +42,10 @@ export class PushDeliveryService {
 
     try {
       const serviceAccountJson = this.config.get<string>(
-        'FIREBASE_SERVICE_ACCOUNT',
+        "FIREBASE_SERVICE_ACCOUNT",
       );
       const credentialsPath = this.config.get<string>(
-        'GOOGLE_APPLICATION_CREDENTIALS',
+        "GOOGLE_APPLICATION_CREDENTIALS",
       );
 
       if (serviceAccountJson) {
@@ -57,14 +57,14 @@ export class PushDeliveryService {
         this.fcmAvailable = true;
       } else {
         this.logger.warn(
-          'FCM not configured (FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS missing). ' +
-            'Push notifications will be logged as SENT without a real send.',
+          "FCM not configured (FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS missing). " +
+            "Push notifications will be logged as SENT without a real send.",
         );
       }
     } catch (err) {
       this.logger.error(
         `FCM initialization failed: ${(err as Error).message}`,
-        'PushDeliveryService',
+        "PushDeliveryService",
       );
       this.fcmAvailable = false;
     }
@@ -78,9 +78,9 @@ export class PushDeliveryService {
       // Graceful degradation — log as if delivered to the notification service.
       this.logger.log(
         `[PUSH-STUB] to ${token.slice(0, 12)}… : ${payload.title} — ${payload.body}`,
-        'PushDeliveryService',
+        "PushDeliveryService",
       );
-      return { delivered: false, error: 'FCM not configured' };
+      return { delivered: false, error: "FCM not configured" };
     }
 
     try {
@@ -96,27 +96,27 @@ export class PushDeliveryService {
       const response = await getMessaging().send(message);
       this.logger.log(
         `Push delivered to ${token.slice(0, 12)}… (${response})`,
-        'PushDeliveryService',
+        "PushDeliveryService",
       );
       return { delivered: true };
     } catch (err) {
       const error = err as { code?: string; message?: string };
       // Token no longer valid — caller should unregister the device.
       if (
-        error.code === 'messaging/registration-token-not-registered' ||
-        error.code === 'messaging/invalid-registration-token'
+        error.code === "messaging/registration-token-not-registered" ||
+        error.code === "messaging/invalid-registration-token"
       ) {
         this.logger.warn(
           `Stale device token removed: ${token.slice(0, 12)}…`,
-          'PushDeliveryService',
+          "PushDeliveryService",
         );
-        return { delivered: false, error: 'DEVICE_UNREGISTERED' };
+        return { delivered: false, error: "DEVICE_UNREGISTERED" };
       }
       this.logger.error(
-        `Push delivery failed: ${error.message ?? 'unknown error'}`,
-        'PushDeliveryService',
+        `Push delivery failed: ${error.message ?? "unknown error"}`,
+        "PushDeliveryService",
       );
-      return { delivered: false, error: error.message ?? 'PUSH_FAILED' };
+      return { delivered: false, error: error.message ?? "PUSH_FAILED" };
     }
   }
 }

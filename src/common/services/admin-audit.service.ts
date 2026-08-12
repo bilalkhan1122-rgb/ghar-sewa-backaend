@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { Prisma } from 'generated/prisma/client';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { Prisma } from "generated/prisma/client";
 
 export interface AdminAuditInput {
   /** Admin user id (matches JWT sub). */
@@ -59,12 +59,12 @@ export class AdminAuditService {
    */
   recordFromRequest(
     req: { ip?: string; headers?: Record<string, string | undefined> },
-    input: Omit<AdminAuditInput, 'ipAddress' | 'userAgent'>,
+    input: Omit<AdminAuditInput, "ipAddress" | "userAgent">,
   ) {
     return this.record({
       ...input,
       ipAddress: req.ip ?? null,
-      userAgent: req.headers?.['user-agent'] ?? null,
+      userAgent: req.headers?.["user-agent"] ?? null,
     });
   }
 
@@ -101,7 +101,7 @@ export class AdminAuditService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           admin: { select: { id: true, fullName: true, email: true } },
         },
@@ -131,7 +131,7 @@ export class AdminAuditService {
       },
     });
     if (!log) {
-      throw new NotFoundException('Audit log entry not found');
+      throw new NotFoundException("Audit log entry not found");
     }
     return log;
   }

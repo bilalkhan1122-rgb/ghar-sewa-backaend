@@ -1,9 +1,9 @@
-import { IsString, MaxLength, IsOptional, IsUrl } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, MaxLength, IsOptional, IsUrl } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class UpdateMessageDto {
   @ApiPropertyOptional({
-    description: 'Updated message content',
+    description: "Updated message content",
     maxLength: 5000,
   })
   @IsOptional()
@@ -12,7 +12,7 @@ export class UpdateMessageDto {
   content?: string;
 
   @ApiPropertyOptional({
-    description: 'Updated attachment URL',
+    description: "Updated attachment URL",
   })
   @IsOptional()
   @IsUrl({ require_protocol: true })

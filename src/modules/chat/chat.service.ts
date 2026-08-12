@@ -5,28 +5,28 @@ import {
   ForbiddenException,
   Inject,
   forwardRef,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { ChatGateway } from './chat.gateway';
-import { NotificationsService } from 'src/modules/notifications/notifications.service';
-import { CreateConversationDto } from './dtos/create-conversation.dto';
-import { SendMessageDto, ChatMessageType } from './dtos/send-message.dto';
-import { UpdateMessageDto } from './dtos/update-message.dto';
-import { MarkReadDto } from './dtos/mark-read.dto';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { ChatGateway } from "./chat.gateway";
+import { NotificationsService } from "src/modules/notifications/notifications.service";
+import { CreateConversationDto } from "./dtos/create-conversation.dto";
+import { SendMessageDto, ChatMessageType } from "./dtos/send-message.dto";
+import { UpdateMessageDto } from "./dtos/update-message.dto";
+import { MarkReadDto } from "./dtos/mark-read.dto";
 import {
   ConversationQueryDto,
   ConversationSortField,
-} from './dtos/conversation-query.dto';
-import { MessageQueryDto } from './dtos/message-query.dto';
-import { Logger } from 'nestjs-pino';
+} from "./dtos/conversation-query.dto";
+import { MessageQueryDto } from "./dtos/message-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   UserRole,
   MessageType,
   BookingStatus,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /**
  * Configurable edit window (minutes). Senders may only edit/delete
@@ -54,11 +54,11 @@ export class ChatService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (dto.participantId === userId) {
-      throw new BadRequestException('You cannot start a chat with yourself');
+      throw new BadRequestException("You cannot start a chat with yourself");
     }
 
     // Resolve who is customer and who is provider for this job
@@ -73,7 +73,7 @@ export class ChatService {
       customerId = dto.participantId;
     } else {
       throw new ForbiddenException(
-        'You are not part of this job and cannot start this conversation',
+        "You are not part of this job and cannot start this conversation",
       );
     }
 
@@ -85,7 +85,7 @@ export class ChatService {
 
     if (!providerUser || providerUser.role !== UserRole.PROVIDER) {
       throw new BadRequestException(
-        'Conversations can only be started with a provider involved in the job',
+        "Conversations can only be started with a provider involved in the job",
       );
     }
 
@@ -105,7 +105,7 @@ export class ChatService {
 
     if (!bid && !booking) {
       throw new ForbiddenException(
-        'You can only chat with a provider who submitted a bid or was booked for this job',
+        "You can only chat with a provider who submitted a bid or was booked for this job",
       );
     }
 
@@ -140,7 +140,7 @@ export class ChatService {
     });
 
     this.logger.log({
-      message: 'Conversation created',
+      message: "Conversation created",
       conversationId: conversation.id,
       jobId: job.id,
       customerId,
@@ -194,7 +194,7 @@ export class ChatService {
     this.notifyNewMessage(conversation, userId, lastMessage);
 
     this.logger.log({
-      message: 'Message sent',
+      message: "Message sent",
       conversationId,
       senderId: userId,
       type: dto.type,
@@ -321,7 +321,7 @@ export class ChatService {
         conversationId: message.conversationId,
         deletedAt: null,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     await this.prisma.conversation.update({
@@ -344,7 +344,7 @@ export class ChatService {
       userId,
     );
 
-    return { message: 'Message deleted successfully', id: messageId };
+    return { message: "Message deleted successfully", id: messageId };
   }
 
   // ─── Conversation History ────────────────────────────────────────────
@@ -370,7 +370,7 @@ export class ChatService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' }, // fetch newest first for pagination
+        orderBy: { createdAt: "desc" }, // fetch newest first for pagination
         include: this.messageIncludes(),
       }),
       this.prisma.message.count({ where }),
@@ -447,7 +447,7 @@ export class ChatService {
       limit = 10,
       jobId,
       sortBy = ConversationSortField.LAST_ACTIVITY,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
     const skip = (page - 1) * limit;
 
@@ -461,8 +461,8 @@ export class ChatService {
 
     const orderByField =
       sortBy === ConversationSortField.CREATED_AT
-        ? 'createdAt'
-        : 'lastActivity';
+        ? "createdAt"
+        : "lastActivity";
 
     const [conversations, total] = await Promise.all([
       this.prisma.conversation.findMany({
@@ -518,7 +518,7 @@ export class ChatService {
 
     return {
       message:
-        'Conversation removed from your list. Chat history is retained for dispute resolution.',
+        "Conversation removed from your list. Chat history is retained for dispute resolution.",
     };
   }
 
@@ -544,21 +544,21 @@ export class ChatService {
       case ChatMessageType.TEXT:
         if (!dto.content || !dto.content.trim()) {
           throw new BadRequestException(
-            'Content is required for text messages',
+            "Content is required for text messages",
           );
         }
         break;
       case ChatMessageType.IMAGE:
         if (!dto.attachmentUrl) {
           throw new BadRequestException(
-            'Attachment URL is required for image messages',
+            "Attachment URL is required for image messages",
           );
         }
         break;
       case ChatMessageType.LOCATION:
         if (dto.latitude == null || dto.longitude == null) {
           throw new BadRequestException(
-            'Latitude and longitude are required for location messages',
+            "Latitude and longitude are required for location messages",
           );
         }
         break;
@@ -571,22 +571,22 @@ export class ChatService {
     });
 
     if (!conversation) {
-      throw new NotFoundException('Conversation not found');
+      throw new NotFoundException("Conversation not found");
     }
 
     const isCustomer = conversation.customerId === userId;
     const isProvider = conversation.providerId === userId;
 
     if (!isCustomer && !isProvider) {
-      throw new ForbiddenException('You are not part of this conversation');
+      throw new ForbiddenException("You are not part of this conversation");
     }
 
     // Respect per-side soft deletion
     if (isCustomer && conversation.customerDeletedAt) {
-      throw new NotFoundException('Conversation not found');
+      throw new NotFoundException("Conversation not found");
     }
     if (isProvider && conversation.providerDeletedAt) {
-      throw new NotFoundException('Conversation not found');
+      throw new NotFoundException("Conversation not found");
     }
 
     return conversation;
@@ -598,11 +598,11 @@ export class ChatService {
     });
 
     if (!message || message.deletedAt) {
-      throw new NotFoundException('Message not found');
+      throw new NotFoundException("Message not found");
     }
 
     if (message.senderId !== userId) {
-      throw new ForbiddenException('You can only manage your own messages');
+      throw new ForbiddenException("You can only manage your own messages");
     }
 
     return message;
@@ -618,7 +618,6 @@ export class ChatService {
       },
     });
   }
-
 
   /**
    * Notifies the other participant about a new message.
@@ -640,9 +639,9 @@ export class ChatService {
     void this.notifications.send({
       userId: recipientId,
       type: NotificationType.NEW_MESSAGE,
-      title: 'New message',
-      message: preview || 'You have a new message',
-      relatedEntityType: 'CONVERSATION',
+      title: "New message",
+      message: preview || "You have a new message",
+      relatedEntityType: "CONVERSATION",
       relatedEntityId: conversation.id,
     });
   }
@@ -655,11 +654,11 @@ export class ChatService {
     if (message.content) return message.content;
     switch (message.type) {
       case MessageType.IMAGE:
-        return '📷 Image';
+        return "📷 Image";
       case MessageType.LOCATION:
-        return '📍 Location';
+        return "📍 Location";
       default:
-        return '';
+        return "";
     }
   }
 

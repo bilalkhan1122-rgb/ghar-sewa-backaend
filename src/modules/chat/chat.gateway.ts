@@ -7,13 +7,13 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   OnGatewayInit,
-} from '@nestjs/websockets';
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { ChatService } from './chat.service';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/websockets";
+import { Injectable, Inject, forwardRef } from "@nestjs/common";
+import { Server, Socket } from "socket.io";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import { ChatService } from "./chat.service";
+import { Logger } from "nestjs-pino";
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -38,7 +38,7 @@ interface JwtPayload {
     origin: true,
     credentials: true,
   },
-  namespace: '/chat',
+  namespace: "/chat",
 })
 @Injectable()
 export class ChatGateway
@@ -56,7 +56,7 @@ export class ChatGateway
   ) {}
 
   afterInit() {
-    this.logger.log('Chat gateway initialized', 'ChatGateway');
+    this.logger.log("Chat gateway initialized", "ChatGateway");
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -68,7 +68,7 @@ export class ChatGateway
       }
 
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
-        secret: this.config.get<string>('JWT_ACCESS_SECRET'),
+        secret: this.config.get<string>("JWT_ACCESS_SECRET"),
       });
 
       client.userId = payload.sub;
@@ -84,13 +84,13 @@ export class ChatGateway
   handleDisconnect(client: AuthenticatedSocket) {
     this.logger.log(
       { userId: client.userId, socketId: client.id },
-      'Chat client disconnected',
+      "Chat client disconnected",
     );
   }
 
   // ─── Join Conversation Room ──────────────────────────────────────────
 
-  @SubscribeMessage('conversation:join')
+  @SubscribeMessage("conversation:join")
   async handleJoinConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { conversationId: string },
@@ -104,18 +104,18 @@ export class ChatGateway
         client.userId,
       );
       await client.join(`conversation:${data.conversationId}`);
-      client.emit('conversation:joined', {
+      client.emit("conversation:joined", {
         conversationId: data.conversationId,
       });
     } catch {
-      client.emit('conversation:error', {
+      client.emit("conversation:error", {
         conversationId: data.conversationId,
-        message: 'You are not part of this conversation',
+        message: "You are not part of this conversation",
       });
     }
   }
 
-  @SubscribeMessage('conversation:leave')
+  @SubscribeMessage("conversation:leave")
   async handleLeaveConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { conversationId: string },
@@ -126,7 +126,7 @@ export class ChatGateway
 
   // ─── Typing Indicator ────────────────────────────────────────────────
 
-  @SubscribeMessage('typing')
+  @SubscribeMessage("typing")
   async handleTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { conversationId: string; isTyping: boolean },
@@ -165,13 +165,13 @@ export class ChatGateway
     const payload = { conversationId, message };
     this.server
       .to(`conversation:${conversationId}`)
-      .emit('message:new', payload);
+      .emit("message:new", payload);
     // Fallback: deliver to the other party's personal room even if they
     // haven't joined the conversation room yet.
     if (conversation && senderId) {
       this.server
         .to(`user:${this.otherPartyId(conversation, senderId)}`)
-        .emit('message:new', payload);
+        .emit("message:new", payload);
     }
   }
 
@@ -184,11 +184,11 @@ export class ChatGateway
     const payload = { conversationId, message };
     this.server
       .to(`conversation:${conversationId}`)
-      .emit('message:edited', payload);
+      .emit("message:edited", payload);
     if (conversation && senderId) {
       this.server
         .to(`user:${this.otherPartyId(conversation, senderId)}`)
-        .emit('message:edited', payload);
+        .emit("message:edited", payload);
     }
   }
 
@@ -201,11 +201,11 @@ export class ChatGateway
     const payload = { conversationId, message };
     this.server
       .to(`conversation:${conversationId}`)
-      .emit('message:deleted', payload);
+      .emit("message:deleted", payload);
     if (conversation && senderId) {
       this.server
         .to(`user:${this.otherPartyId(conversation, senderId)}`)
-        .emit('message:deleted', payload);
+        .emit("message:deleted", payload);
     }
   }
 
@@ -219,11 +219,11 @@ export class ChatGateway
     const payload = { conversationId, userId, readAt, unreadCount };
     this.server
       .to(`conversation:${conversationId}`)
-      .emit('read:receipt', payload);
+      .emit("read:receipt", payload);
     if (conversation) {
       this.server
         .to(`user:${this.otherPartyId(conversation, userId)}`)
-        .emit('read:receipt', payload);
+        .emit("read:receipt", payload);
     }
   }
 
@@ -233,7 +233,7 @@ export class ChatGateway
     isTyping: boolean,
     conversation?: { customerId: string; providerId: string },
   ) {
-    this.server.to(`conversation:${conversationId}`).emit('typing', {
+    this.server.to(`conversation:${conversationId}`).emit("typing", {
       conversationId,
       userId,
       isTyping,
@@ -241,7 +241,7 @@ export class ChatGateway
     if (conversation) {
       this.server
         .to(`user:${this.otherPartyId(conversation, userId)}`)
-        .emit('typing', { conversationId, userId, isTyping });
+        .emit("typing", { conversationId, userId, isTyping });
     }
   }
 
@@ -252,11 +252,11 @@ export class ChatGateway
 
     // 1. auth.token
     const authToken = (handshake.auth as Record<string, unknown>)?.token;
-    if (typeof authToken === 'string' && authToken) return authToken;
+    if (typeof authToken === "string" && authToken) return authToken;
 
     // 2. query ?token=
     const queryToken = handshake.query?.token;
-    if (typeof queryToken === 'string' && queryToken) return queryToken;
+    if (typeof queryToken === "string" && queryToken) return queryToken;
 
     // 3. accessToken cookie
     const cookieHeader = handshake.headers?.cookie;

@@ -1,10 +1,18 @@
-import { IsString, IsNumber, IsOptional, Min, Max, MaxLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  Min,
+  Max,
+  MaxLength,
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CounterBidDto {
   @ApiProperty({
-    description: 'Price the customer is proposing instead of the bid amount, in PKR',
+    description:
+      "Price the customer is proposing instead of the bid amount, in PKR",
     example: 1000,
     minimum: 1,
     maximum: 9999999,
@@ -16,8 +24,8 @@ export class CounterBidDto {
   counterPrice: number;
 
   @ApiPropertyOptional({
-    description: 'Optional note explaining the counter-offer',
-    example: 'Can you do it for this price? The job is smaller than it looks.',
+    description: "Optional note explaining the counter-offer",
+    example: "Can you do it for this price? The job is smaller than it looks.",
     maxLength: 500,
   })
   @IsOptional()

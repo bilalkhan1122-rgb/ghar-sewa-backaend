@@ -4,19 +4,19 @@ import {
   ValidatorConstraintInterface,
   ValidationArguments,
   ValidatorConstraint,
-} from 'class-validator';
+} from "class-validator";
 
 @ValidatorConstraint({ async: false })
 export class IsPakistaniPhoneConstraint implements ValidatorConstraintInterface {
   validate(value: unknown) {
-    if (typeof value !== 'string') return false;
+    if (typeof value !== "string") return false;
 
     // Pakistani mobile formats:
     // +923001234567 (international)
     // 03001234567 (local)
     // 923001234567 (without +)
     const pakistaniPhoneRegex = /^(\+92|0|92)?3\d{9}$/;
-    return pakistaniPhoneRegex.test(value.replace(/\s/g, ''));
+    return pakistaniPhoneRegex.test(value.replace(/\s/g, ""));
   }
 
   defaultMessage(args: ValidationArguments) {
@@ -27,7 +27,7 @@ export class IsPakistaniPhoneConstraint implements ValidatorConstraintInterface 
 export function IsPakistaniPhone(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
-      name: 'isPakistaniPhone',
+      name: "isPakistaniPhone",
       target: object.constructor,
       propertyName,
       options: validationOptions,

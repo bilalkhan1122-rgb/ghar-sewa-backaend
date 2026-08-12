@@ -3,9 +3,9 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
 
 @Injectable()
 export class RefreshTokenGuard implements CanActivate {
@@ -19,20 +19,20 @@ export class RefreshTokenGuard implements CanActivate {
       cookies: Record<string, string>;
       user?: unknown;
     }>();
-    const token = request.cookies['refreshToken'];
+    const token = request.cookies["refreshToken"];
 
-    if (!token || typeof token !== 'string') {
-      throw new UnauthorizedException('Refresh Token missing or malformed');
+    if (!token || typeof token !== "string") {
+      throw new UnauthorizedException("Refresh Token missing or malformed");
     }
 
     try {
       const payload: unknown = await this.jwtService.verifyAsync(token, {
-        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+        secret: this.config.get<string>("JWT_REFRESH_SECRET"),
       });
       request.user = payload;
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid or expired Refresh Token');
+      throw new UnauthorizedException("Invalid or expired Refresh Token");
     }
   }
 }

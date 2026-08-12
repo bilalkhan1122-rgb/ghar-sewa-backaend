@@ -1,16 +1,16 @@
-import { IsOptional, IsInt, Min, Max, IsEnum, IsString } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { IsOptional, IsInt, Min, Max, IsEnum, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { PaginationDto } from "src/common/dtos/pagination.dto";
 
 export enum ReviewSortField {
-  CREATED_AT = 'createdAt',
-  RATING = 'rating',
+  CREATED_AT = "createdAt",
+  RATING = "rating",
 }
 
 export class ReviewQueryDto extends PaginationDto {
   @ApiPropertyOptional({
-    description: 'Filter by rating (1-5)',
+    description: "Filter by rating (1-5)",
   })
   @IsOptional()
   @Type(() => Number)
@@ -20,7 +20,7 @@ export class ReviewQueryDto extends PaginationDto {
   rating?: number;
 
   @ApiPropertyOptional({
-    description: 'Sort field',
+    description: "Sort field",
     enum: ReviewSortField,
     default: ReviewSortField.CREATED_AT,
   })
@@ -29,11 +29,11 @@ export class ReviewQueryDto extends PaginationDto {
   sortBy?: ReviewSortField = ReviewSortField.CREATED_AT;
 
   @ApiPropertyOptional({
-    description: 'Sort order',
-    enum: ['asc', 'desc'],
-    default: 'desc',
+    description: "Sort order",
+    enum: ["asc", "desc"],
+    default: "desc",
   })
   @IsOptional()
   @IsString()
-  sortOrder?: 'asc' | 'desc' = 'desc';
+  sortOrder?: "asc" | "desc" = "desc";
 }

@@ -5,13 +5,13 @@ import {
   Min,
   Max,
   MaxLength,
-} from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class UpdateBidDto {
   @ApiPropertyOptional({
-    description: 'Updated offered price in PKR',
+    description: "Updated offered price in PKR",
     example: 1500,
     minimum: 1,
     maximum: 9999999,
@@ -24,8 +24,8 @@ export class UpdateBidDto {
   offeredPrice?: number;
 
   @ApiPropertyOptional({
-    description: 'Updated message to the customer',
-    example: 'I can do it for 1500 instead.',
+    description: "Updated message to the customer",
+    example: "I can do it for 1500 instead.",
     maxLength: 500,
   })
   @IsOptional()

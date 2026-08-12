@@ -150,11 +150,32 @@ Base URL: `http://localhost:8080/api/v1`
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| POST | `/auth/signup` | Register new user | No |
+| POST | `/auth/customer/register` | Register a customer | No |
+| POST | `/auth/provider/register` | Register a provider | No |
 | POST | `/auth/login` | Login with credentials | No |
+| POST | `/auth/google` | Sign up / log in with a Google ID token | No |
+| POST | `/auth/verify-email` | Confirm email with a one-time token | No |
+| POST | `/auth/forgot-password` | Request a password reset email | No |
+| POST | `/auth/reset-password` | Set a new password with a reset token | No |
 | POST | `/auth/refresh` | Refresh access token | Yes (refresh token) |
 | POST | `/auth/logout` | Logout and invalidate tokens | Yes |
 | GET | `/auth/me` | Get current user info | Yes |
+
+#### POST /auth/google
+
+**Request:** (the client obtains `idToken` from the Google Sign-In SDK)
+```json
+{
+  "idToken": "eyJhbGciOiJSUzI1NiIs...",
+  "role": "CUSTOMER"
+}
+```
+
+**Behavior:**
+- Verifies the token's signature, issuer, expiry and audience against `GOOGLE_CLIENT_ID` (plus any extra `GOOGLE_CLIENT_IDS`).
+- Existing email → logs the account in and links the Google identity (account linking).
+- New email → creates a Google account (no password/phone), sends a welcome email + a one-time email verification link, and issues tokens.
+- `role` is only honored for new accounts (`CUSTOMER` or `PROVIDER`); it is ignored for existing users.
 
 #### POST /auth/signup
 
@@ -582,6 +603,101 @@ PII auto-redacted: passwords, tokens, cookies. Change via `LOG_LEVEL` env.
 | `PORT` | No | `8080` | Server port |
 | `CORS_ORIGIN` | No | `http://localhost:3000` | Allowed origins (comma-separated) |
 | `LOG_LEVEL` | No | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` |
+| `GOOGLE_CLIENT_ID` | No* | - | Google OAuth client ID for `/auth/google` (endpoint returns 503 until set) |
+| `GOOGLE_CLIENT_IDS` | No | - | Extra comma-separated Google client IDs (Android/iOS audiences) |
+| `RESEND_API_KEY` | No* | - | Resend API key for transactional email (emails logged as stubs until set) |
+| `EMAIL_FROM` | No | `Ghar Sewa <onboarding@resend.dev>` | Sender address (use a verified domain in production) |
+| `FRONTEND_URL` | No | `http://localhost:3000` | Base URL used in verification/reset email links |
+| `PUSHER_APP_ID` | No* | - | Pusher app id (realtime events for Modules 19-21) |
+| `PUSHER_KEY` | No* | - | Pusher key (public — safe to ship to clients) |
+| `PUSHER_SECRET` | No* | - | Pusher secret (server-only — never expose to clients) |
+| `PUSHER_CLUSTER` | No* | - | Pusher cluster, e.g. `ap2` |
+
+\* Required only for the feature to actually work, not to boot the app.
+
+## Module 19 — Provider Ranking
+
+Providers earn rank badges from completed jobs **and** average rating (both required):
+
+| Rank | Completed jobs | Min avg rating |
+|------|---------------|----------------|
+| Bronze | 50 | 4.0 |
+| Silver | 150 | 4.3 |
+| Gold | 350 | 4.6 |
+| Platinum | 600 | 4.8 |
+
+- Thresholds are centralized in `src/modules/ranking/ranking.config.ts`.
+- Ranks are re-evaluated automatically on customer-confirmed job completion and on review create/update/delete, and manually via admin endpoints — all through the same `RankingService`.
+- Upgrades and downgrades are recorded in `provider_rank_history` and notify the provider (`RANK_UPGRADED` / `RANK_DOWNGRADED`).
+
+**Endpoints**
+- `GET /provider/rank` — own rank + details
+- `GET /provider/rank/history` — own rank history
+- `GET /admin/rankings` — list/filter by rank (admin)
+- `GET /admin/rankings/stats` — rank distribution (admin)
+- `GET /admin/rankings/:providerId/history` (admin)
+- `POST /admin/rankings/:providerId/recalculate` (admin)
+- `POST /admin/rankings/recalculate` — all providers (admin)
+
+## Module 20 — Urgent Jobs
+
+- `POST /jobs` accepts `isUrgent` (customer only). Urgent jobs expire in **6 hours** (normal: 24h); the expiry timestamp is always computed server-side.
+- Urgent pending jobs float to the top of the provider feed (`GET /provider/jobs/feed`).
+- Matching providers get a `URGENT_JOB_POSTED` notification instead of `NEW_JOB`.
+- Expiry uses the existing expiresAt mechanism — a scheduled job (`*/15 * * * *`) now expires overdue jobs automatically; the admin endpoint `POST /admin/jobs/expire-overdue` still works.
+
+## Module 21 — Analytics
+
+Admin-only endpoints under `GET /admin/analytics/*` (all metrics computed live from existing data; no analytics tables):
+
+- `/overview`, `/jobs`, `/revenue`, `/providers`, `/customers`, `/categories`, `/disputes`, `/bookings`
+- Date windows: `range=today | last_7_days | last_30_days | custom` + `dateFrom`/`dateTo` (custom capped at 366 days).
+- `GET /admin/analytics/export/csv` — CSV export (no dependencies).
+- `GET /admin/analytics/export/pdf` — **placeholder**: returns 503 until a PDF library (e.g. `pdfkit`) is installed and wired into `AnalyticsExportService.exportPdf()`.
+
+## Realtime (Pusher)
+
+Pusher is the realtime delivery layer for Modules 19-21; the **database remains the source of truth**. The backend runs on serverless (Vercel), so there is no persistent WebSocket server — clients connect straight to Pusher.
+
+### Configuration
+
+```env
+PUSHER_APP_ID=your_app_id
+PUSHER_KEY=your_key
+PUSHER_SECRET=your_secret   # server-only, never exposed
+PUSHER_CLUSTER=ap2
+```
+
+Without these vars the app still boots; events are logged as `[REALTIME-STUB]` (same pattern as the FCM push stub).
+
+### Channel auth
+
+`POST /realtime/pusher/auth` (JWT cookie required) signs private-channel subscriptions. Ownership is enforced from the JWT payload:
+
+| Channel | Who may subscribe |
+|---------|-------------------|
+| `private-user-{userId}` | that user only |
+| `private-provider-{providerId}` | that provider only |
+| `private-admin` | ADMIN only |
+
+A user can never obtain an auth token for another user's/provider's channel or the admin channel.
+
+### Events
+
+| Event | Channel | When | Payload |
+|-------|---------|------|---------|
+| `provider.rank.updated` | `private-provider-{id}` | rank changes (upgrade/downgrade) | `providerId`, `previousRank`, `newRank`, `timestamp` |
+| `job.urgent.created` | `private-provider-{id}` (matching providers only) | urgent job posted | `jobId`, `title`, `categoryId`, `offeredPrice`, `isUrgent`, `expiresAt` |
+| `job.urgent.expired` | `private-user-{customerId}` | urgent job expires | `jobId`, `title`, `isUrgent`, `expiredAt` |
+| `job.urgent.accepted` | `private-user-{customerId}` + `private-provider-{providerId}` | urgent job accepted (direct booking / bid / counter-offer) | `jobId`, `bookingId`, `title`, `isUrgent`, `acceptedAt` |
+| `analytics.updated` | `private-admin` | completion confirmed, review changed, bulk rank recalc | `reason`, `timestamp` |
+
+### Reliability & security
+
+- Events are published **after** the database operation commits — never before.
+- Pusher failures are logged and swallowed: the business data (notifications, history) is never rolled back because realtime delivery failed.
+- The Pusher secret never leaves the server; clients only hit the auth endpoint.
+- Analytics events are never broadcast to customers/providers (admin channel only).
 
 ## Troubleshooting: Real Fixes
 

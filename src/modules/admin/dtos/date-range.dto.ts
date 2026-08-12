@@ -1,16 +1,16 @@
-import { IsISO8601, IsOptional } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsISO8601, IsOptional } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class DateRangeDto {
   @ApiPropertyOptional({
-    description: 'Start date (ISO)',
-    example: '2026-01-01',
+    description: "Start date (ISO)",
+    example: "2026-01-01",
   })
   @IsOptional()
   @IsISO8601()
   dateFrom?: string;
 
-  @ApiPropertyOptional({ description: 'End date (ISO)', example: '2026-12-31' })
+  @ApiPropertyOptional({ description: "End date (ISO)", example: "2026-12-31" })
   @IsOptional()
   @IsISO8601()
   dateTo?: string;

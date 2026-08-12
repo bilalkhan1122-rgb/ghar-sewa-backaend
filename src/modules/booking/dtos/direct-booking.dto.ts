@@ -6,28 +6,28 @@ import {
   Max,
   MinLength,
   MaxLength,
-} from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class DirectBookingDto {
   @ApiProperty({
-    description: 'Provider ID to book directly',
-    example: 'uuid-here',
+    description: "Provider ID to book directly",
+    example: "uuid-here",
   })
-  @IsUUID('4')
+  @IsUUID("4")
   providerId: string;
 
   @ApiProperty({
-    description: 'Service category ID',
-    example: 'uuid-here',
+    description: "Service category ID",
+    example: "uuid-here",
   })
-  @IsUUID('4')
+  @IsUUID("4")
   categoryId: string;
 
   @ApiProperty({
-    description: 'Job title',
-    example: 'Fix leaking kitchen faucet',
+    description: "Job title",
+    example: "Fix leaking kitchen faucet",
     minLength: 5,
     maxLength: 200,
   })
@@ -37,8 +37,8 @@ export class DirectBookingDto {
   title: string;
 
   @ApiProperty({
-    description: 'Detailed job description',
-    example: 'The kitchen sink faucet has been leaking for 2 days.',
+    description: "Detailed job description",
+    example: "The kitchen sink faucet has been leaking for 2 days.",
     minLength: 20,
     maxLength: 5000,
   })
@@ -48,8 +48,8 @@ export class DirectBookingDto {
   description: string;
 
   @ApiProperty({
-    description: 'Job address',
-    example: 'House #12, Street 5, Gulberg, Lahore',
+    description: "Job address",
+    example: "House #12, Street 5, Gulberg, Lahore",
     minLength: 5,
     maxLength: 500,
   })
@@ -59,7 +59,7 @@ export class DirectBookingDto {
   address: string;
 
   @ApiProperty({
-    description: 'Latitude coordinate',
+    description: "Latitude coordinate",
     example: 31.5204,
     minimum: -90,
     maximum: 90,
@@ -71,7 +71,7 @@ export class DirectBookingDto {
   latitude: number;
 
   @ApiProperty({
-    description: 'Longitude coordinate',
+    description: "Longitude coordinate",
     example: 74.3587,
     minimum: -180,
     maximum: 180,
@@ -83,7 +83,7 @@ export class DirectBookingDto {
   longitude: number;
 
   @ApiProperty({
-    description: 'Agreed price in PKR',
+    description: "Agreed price in PKR",
     example: 1500,
     minimum: 1,
     maximum: 9999999,

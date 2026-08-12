@@ -3,12 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateReviewDto } from './dtos/create-review.dto';
-import { UpdateReviewDto } from './dtos/update-review.dto';
-import { ReviewQueryDto, ReviewSortField } from './dtos/review-query.dto';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { CreateReviewDto } from "./dtos/create-review.dto";
+import { UpdateReviewDto } from "./dtos/update-review.dto";
+import { ReviewQueryDto, ReviewSortField } from "./dtos/review-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   ReviewStatus,
@@ -17,8 +17,10 @@ import {
   UserRole,
   VerificationStatus,
   NotificationType,
-} from 'generated/prisma/client';
-import { NotificationsService } from '../notifications/notifications.service';
+} from "generated/prisma/client";
+import { NotificationsService } from "../notifications/notifications.service";
+import { RankingService } from "../ranking/ranking.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
 /**
  * Configurable edit window (hours). Users may only update/delete
@@ -38,6 +40,8 @@ export class ReviewsService {
     private readonly prisma: PrismaService,
     private readonly logger: Logger,
     private readonly notifications: NotificationsService,
+    private readonly ranking: RankingService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ─── Submit Review ───────────────────────────────────────────────────
@@ -50,30 +54,30 @@ export class ReviewsService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     // Reviewer must be part of the booking (customer or assigned provider)
     if (booking.customerId !== userId && booking.providerId !== userId) {
       throw new ForbiddenException(
-        'You can only review bookings you were part of',
+        "You can only review bookings you were part of",
       );
     }
 
     // Booking must be completed and confirmed by the customer
     const confirmedByCustomer = booking.job.timeline.some(
-      (t) => t.event === 'CUSTOMER_CONFIRMED',
+      (t) => t.event === "CUSTOMER_CONFIRMED",
     );
 
     if (booking.status !== BookingStatus.COMPLETED) {
       throw new BadRequestException(
-        'Reviews are only allowed after a booking has been completed',
+        "Reviews are only allowed after a booking has been completed",
       );
     }
 
     if (!confirmedByCustomer) {
       throw new BadRequestException(
-        'Booking must be confirmed by the customer before it can be reviewed',
+        "Booking must be confirmed by the customer before it can be reviewed",
       );
     }
 
@@ -93,12 +97,12 @@ export class ReviewsService {
     });
 
     if (existing && !existing.deletedAt) {
-      throw new BadRequestException('You have already reviewed this booking');
+      throw new BadRequestException("You have already reviewed this booking");
     }
 
     if (existing && existing.deletedAt) {
       throw new BadRequestException(
-        'You have already reviewed this booking. Reviews remain linked to a booking permanently.',
+        "You have already reviewed this booking. Reviews remain linked to a booking permanently.",
       );
     }
 
@@ -127,14 +131,14 @@ export class ReviewsService {
     void this.notifications.send({
       userId: revieweeId,
       type: NotificationType.REVIEW_RECEIVED,
-      title: 'You received a new review ⭐',
+      title: "You received a new review ⭐",
       message: `Someone rated you ${dto.rating}/5 on a recent booking.`,
-      relatedEntityType: 'REVIEW',
+      relatedEntityType: "REVIEW",
       relatedEntityId: review.id,
     });
 
     this.logger.log({
-      message: 'Review submitted',
+      message: "Review submitted",
       reviewId: review.id,
       bookingId: booking.id,
       reviewerId,
@@ -176,7 +180,7 @@ export class ReviewsService {
     await this.recomputeRatingSummary(review.revieweeId);
 
     this.logger.log({
-      message: 'Review updated',
+      message: "Review updated",
       reviewId,
       reviewerId: userId,
     });
@@ -208,18 +212,18 @@ export class ReviewsService {
     await this.recomputeRatingSummary(review.revieweeId);
 
     this.logger.log({
-      message: 'Review deleted (soft)',
+      message: "Review deleted (soft)",
       reviewId,
       reviewerId: userId,
     });
 
-    return { message: 'Review deleted successfully' };
+    return { message: "Review deleted successfully" };
   }
 
   // ─── View Written Reviews ────────────────────────────────────────────
 
   async listWrittenReviews(userId: string, query: ReviewQueryDto) {
-    const { page = 1, limit = 10, rating, sortBy, sortOrder = 'desc' } = query;
+    const { page = 1, limit = 10, rating, sortBy, sortOrder = "desc" } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ReviewWhereInput = {
@@ -245,7 +249,7 @@ export class ReviewsService {
   // ─── View Received Reviews ───────────────────────────────────────────
 
   async listReceivedReviews(userId: string, query: ReviewQueryDto) {
-    const { page = 1, limit = 10, rating, sortBy, sortOrder = 'desc' } = query;
+    const { page = 1, limit = 10, rating, sortBy, sortOrder = "desc" } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ReviewWhereInput = {
@@ -288,10 +292,10 @@ export class ReviewsService {
       !provider.isActive ||
       provider.verificationStatus !== VerificationStatus.APPROVED
     ) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
-    const { page = 1, limit = 10, rating, sortBy, sortOrder = 'desc' } = query;
+    const { page = 1, limit = 10, rating, sortBy, sortOrder = "desc" } = query;
     const skip = (page - 1) * limit;
 
     // Only approved, non-deleted reviews are publicly visible
@@ -382,11 +386,11 @@ export class ReviewsService {
     });
 
     if (!review || review.deletedAt) {
-      throw new NotFoundException('Review not found');
+      throw new NotFoundException("Review not found");
     }
 
     if (review.reviewerId !== userId) {
-      throw new ForbiddenException('You can only manage your own reviews');
+      throw new ForbiddenException("You can only manage your own reviews");
     }
 
     return review;
@@ -444,6 +448,20 @@ export class ReviewsService {
 
     // Low rating monitoring — only applies to providers
     await this.monitorLowRating(userId, average);
+
+    // Module 19: a rating change (create/update/delete) can move the
+    // provider's rank (fire-and-forget).
+    void this.ranking
+      .evaluateProviderRank(userId, "Review activity changed rating")
+      .catch((err) => {
+        const error = err as { message?: string };
+        this.logger.error(
+          { err: error, providerId: userId },
+          "Rank evaluation failed after review change",
+        );
+      }); // Module 21 realtime: review changes move provider ratings/rankings —
+    // nudge admin dashboards (after the summary row is committed).
+    void this.realtime.publishAnalyticsUpdated("review_changed");
   }
 
   /**
@@ -476,7 +494,7 @@ export class ReviewsService {
     });
 
     this.logger.log({
-      message: 'LOW_RATING: Provider flagged for admin review',
+      message: "LOW_RATING: Provider flagged for admin review",
       providerId: userId,
       averageRating,
       flagId: flag.id,

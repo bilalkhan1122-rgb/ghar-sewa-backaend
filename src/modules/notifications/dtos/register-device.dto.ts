@@ -5,19 +5,19 @@ import {
   MinLength,
   MaxLength,
   Matches,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export enum DevicePlatform {
-  IOS = 'ios',
-  ANDROID = 'android',
-  WEB = 'web',
+  IOS = "ios",
+  ANDROID = "android",
+  WEB = "web",
 }
 
 export class RegisterDeviceDto {
   @ApiProperty({
-    description: 'FCM device token',
-    example: 'fcm-token-abc123',
+    description: "FCM device token",
+    example: "fcm-token-abc123",
     minLength: 8,
     maxLength: 500,
   })
@@ -25,12 +25,12 @@ export class RegisterDeviceDto {
   @MinLength(8)
   @MaxLength(500)
   @Matches(/^[\w.:\-_]+$/, {
-    message: 'Device token contains invalid characters',
+    message: "Device token contains invalid characters",
   })
   deviceToken: string;
 
   @ApiProperty({
-    description: 'Device platform',
+    description: "Device platform",
     enum: DevicePlatform,
     example: DevicePlatform.ANDROID,
   })
@@ -38,7 +38,7 @@ export class RegisterDeviceDto {
   platform: DevicePlatform;
 
   @ApiPropertyOptional({
-    description: 'Optional device name / model for reference',
+    description: "Optional device name / model for reference",
     maxLength: 100,
   })
   @IsOptional()

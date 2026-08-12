@@ -1,18 +1,18 @@
-import { Params } from 'nestjs-pino';
-import { IncomingMessage, ServerResponse } from 'http';
+import { Params } from "nestjs-pino";
+import { IncomingMessage, ServerResponse } from "http";
 
 export const loggerConfig: Params = {
   pinoHttp: {
     transport:
-      process.env.NODE_ENV !== 'production'
+      process.env.NODE_ENV !== "production"
         ? {
-            target: 'pino-pretty',
+            target: "pino-pretty",
             options: {
               colorize: true,
-              translateTime: 'SYS:standard',
-              ignore: 'pid,hostname',
+              translateTime: "SYS:standard",
+              ignore: "pid,hostname",
               singleLine: false,
-              messageFormat: '[{context}] {msg}',
+              messageFormat: "[{context}] {msg}",
             },
           }
         : undefined,
@@ -31,12 +31,12 @@ export const loggerConfig: Params = {
       err: Error | undefined,
     ) => {
       if (res.statusCode >= 500 || err) {
-        return 'error';
+        return "error";
       }
       if (res.statusCode >= 400) {
-        return 'warn';
+        return "warn";
       }
-      return 'info';
+      return "info";
     },
 
     // Customize success message
@@ -59,12 +59,12 @@ export const loggerConfig: Params = {
     // Redact sensitive information
     redact: {
       paths: [
-        'req.headers.authorization',
-        'req.headers.cookie',
-        'req.body.password',
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "req.body.password",
         'res.headers["set-cookie"]',
       ],
-      censor: '[REDACTED]',
+      censor: "[REDACTED]",
     },
 
     serializers: {
@@ -84,8 +84,8 @@ export const loggerConfig: Params = {
         query: req.query,
         params: req.params,
         headers: {
-          'user-agent': req.headers['user-agent'],
-          'content-type': req.headers['content-type'],
+          "user-agent": req.headers["user-agent"],
+          "content-type": req.headers["content-type"],
         },
         remoteAddress: req.remoteAddress,
         remotePort: req.remotePort,
@@ -93,17 +93,17 @@ export const loggerConfig: Params = {
       res: (res: { statusCode: number; headers: Record<string, unknown> }) => ({
         statusCode: res.statusCode,
         headers: {
-          'content-type': res.headers['content-type'],
+          "content-type": res.headers["content-type"],
         },
       }),
     },
 
-    level: process.env.LOG_LEVEL || 'info',
+    level: process.env.LOG_LEVEL || "info",
 
     // Don't log health check endpoints
     autoLogging: {
       ignore: (req: IncomingMessage) =>
-        req.url === '/health' || req.url === '/api/v1/health',
+        req.url === "/health" || req.url === "/api/v1/health",
     },
   },
 };

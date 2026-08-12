@@ -1,15 +1,15 @@
-import { registerDecorator, ValidationOptions } from 'class-validator';
+import { registerDecorator, ValidationOptions } from "class-validator";
 
 export function IsStrongPassword(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
-      name: 'isStrongPassword',
+      name: "isStrongPassword",
       target: object.constructor,
       propertyName: propertyName,
       options: validationOptions,
       validator: {
         validate(value: unknown) {
-          if (typeof value !== 'string') return false;
+          if (typeof value !== "string") return false;
 
           // At least 8 characters
           if (value.length < 8) return false;
@@ -29,7 +29,7 @@ export function IsStrongPassword(validationOptions?: ValidationOptions) {
           return true;
         },
         defaultMessage() {
-          return 'Password must contain at least 8 characters, including one uppercase letter, one lowercase letter, one number, and one special character';
+          return "Password must contain at least 8 characters, including one uppercase letter, one lowercase letter, one number, and one special character";
         },
       },
     });

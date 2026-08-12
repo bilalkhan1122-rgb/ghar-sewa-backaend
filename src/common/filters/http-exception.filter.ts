@@ -5,10 +5,10 @@ import {
   HttpException,
   HttpStatus,
   Inject,
-} from '@nestjs/common';
-import { Request, Response } from 'express';
-import { ApiResponse } from '../interfaces/api-response.interface';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import { ApiResponse } from "../interfaces/api-response.interface";
+import { Logger } from "nestjs-pino";
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -18,31 +18,31 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
-    const correlationId = request['correlationId'] as string;
+    const correlationId = request["correlationId"] as string;
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
-    let code = 'INTERNAL_SERVER_ERROR';
+    let message = "Internal server error";
+    let code = "INTERNAL_SERVER_ERROR";
     let details: unknown = undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
 
-      if (typeof exceptionResponse === 'string') {
+      if (typeof exceptionResponse === "string") {
         message = exceptionResponse;
       } else if (
-        typeof exceptionResponse === 'object' &&
+        typeof exceptionResponse === "object" &&
         exceptionResponse !== null
       ) {
         const responseObj = exceptionResponse as Record<string, unknown>;
         const rawMessage = responseObj.message;
 
-        if (typeof rawMessage === 'string') {
+        if (typeof rawMessage === "string") {
           message = rawMessage;
         } else if (Array.isArray(rawMessage) && rawMessage.length > 0) {
           // ValidationPipe failure — surface the constraint messages
-          message = 'Validation failed';
+          message = "Validation failed";
           details = rawMessage;
         }
 
@@ -58,7 +58,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       code = this.getErrorCode(status, message);
     } else if (exception instanceof Error) {
       message = exception.message;
-      code = 'INTERNAL_SERVER_ERROR';
+      code = "INTERNAL_SERVER_ERROR";
     }
 
     // Log the error with correlation ID
@@ -95,18 +95,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // Convert message to error code format
     const messageCode = message
       .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, '_')
-      .replace(/^_|_$/g, '');
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
 
     // Map common HTTP status codes
     const statusCodeMap: { [key: number]: string } = {
-      400: 'BAD_REQUEST',
-      401: 'UNAUTHORIZED',
-      403: 'FORBIDDEN',
-      404: 'NOT_FOUND',
-      409: 'CONFLICT',
-      422: 'UNPROCESSABLE_ENTITY',
-      500: 'INTERNAL_SERVER_ERROR',
+      400: "BAD_REQUEST",
+      401: "UNAUTHORIZED",
+      403: "FORBIDDEN",
+      404: "NOT_FOUND",
+      409: "CONFLICT",
+      422: "UNPROCESSABLE_ENTITY",
+      500: "INTERNAL_SERVER_ERROR",
     };
 
     // If we have a specific message code, use it, otherwise use status code
@@ -114,6 +114,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return messageCode;
     }
 
-    return statusCodeMap[status] || 'INTERNAL_SERVER_ERROR';
+    return statusCodeMap[status] || "INTERNAL_SERVER_ERROR";
   }
 }

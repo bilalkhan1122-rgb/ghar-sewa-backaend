@@ -4,11 +4,11 @@ import {
   ForbiddenException,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { UserRole } from 'generated/prisma/client';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { PrismaService } from "src/prisma/prisma.service";
+import { UserRole } from "generated/prisma/client";
+import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 
 /**
  * Permission-based access control for admin routes.
@@ -45,7 +45,7 @@ export class PermissionsGuard implements CanActivate {
     }>();
     const user = request.user;
     if (!user || !user.sub) {
-      throw new UnauthorizedException('User not found in request');
+      throw new UnauthorizedException("User not found in request");
     }
 
     // Legacy/fallback: any ADMIN user without an Admin record gets full access.
@@ -59,7 +59,7 @@ export class PermissionsGuard implements CanActivate {
     }
 
     if (!admin.isActive) {
-      throw new ForbiddenException('Admin account is inactive');
+      throw new ForbiddenException("Admin account is inactive");
     }
 
     // Empty permission list = full access (SUPER_ADMIN).
@@ -72,7 +72,7 @@ export class PermissionsGuard implements CanActivate {
     );
     if (missing.length > 0) {
       throw new ForbiddenException(
-        `Missing permission(s): ${missing.join(', ')}`,
+        `Missing permission(s): ${missing.join(", ")}`,
       );
     }
 

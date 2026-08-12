@@ -3,19 +3,19 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
-} from '@nestjs/common';
-import { Logger } from 'nestjs-pino';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { AdminAuditService } from 'src/common/services/admin-audit.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { WalletService } from './wallet.service';
-import { CreateWithdrawalDto } from './dtos/create-withdrawal.dto';
-import { WithdrawalQueryDto } from './dtos/withdrawal-query.dto';
+} from "@nestjs/common";
+import { Logger } from "nestjs-pino";
+import { PrismaService } from "src/prisma/prisma.service";
+import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { WalletService } from "./wallet.service";
+import { CreateWithdrawalDto } from "./dtos/create-withdrawal.dto";
+import { WithdrawalQueryDto } from "./dtos/withdrawal-query.dto";
 import {
   Prisma,
   WithdrawalStatus,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 const ACTIVE_STATUSES: WithdrawalStatus[] = [
   WithdrawalStatus.PENDING,
@@ -72,7 +72,7 @@ export class WithdrawalsService {
         });
         if (active) {
           throw new ConflictException(
-            'You already have an active withdrawal request. Wait for it to be processed.',
+            "You already have an active withdrawal request. Wait for it to be processed.",
           );
         }
 
@@ -92,7 +92,7 @@ export class WithdrawalsService {
         // Move available → held and record the ledger entry. If the balance
         // is insufficient the whole transaction (incl. the request) rolls back.
         await this.wallet.hold(tx, wallet.id, amount, {
-          referenceType: 'WITHDRAWAL',
+          referenceType: "WITHDRAWAL",
           referenceId: created.id,
           processingKey: `withdrawal:${created.id}`,
           description: `Withdrawal request for ${dto.paymentMethod}`,
@@ -101,13 +101,13 @@ export class WithdrawalsService {
         await this.wallet.audit(tx, {
           walletId: wallet.id,
           actorUserId: providerId,
-          action: 'WITHDRAWAL_SUBMITTED',
+          action: "WITHDRAWAL_SUBMITTED",
           newValues: {
             amount: amount.toString(),
             paymentMethod: dto.paymentMethod,
             withdrawalId: created.id,
           },
-          referenceType: 'WITHDRAWAL',
+          referenceType: "WITHDRAWAL",
           referenceId: created.id,
         });
 
@@ -116,10 +116,10 @@ export class WithdrawalsService {
       .catch((err: unknown) => {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
+          err.code === "P2002"
         ) {
           throw new ConflictException(
-            'You already have an active withdrawal request. Wait for it to be processed.',
+            "You already have an active withdrawal request. Wait for it to be processed.",
           );
         }
         throw err;
@@ -127,7 +127,7 @@ export class WithdrawalsService {
 
     // Placeholder admin event for the payout queue (Module 16).
     this.logger.log({
-      eventType: 'ADMIN_WITHDRAWAL_SUBMITTED',
+      eventType: "ADMIN_WITHDRAWAL_SUBMITTED",
       withdrawalId: result.id,
       providerId,
       amount: amount.toString(),
@@ -136,9 +136,9 @@ export class WithdrawalsService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.WITHDRAWAL_REQUEST_SUBMITTED,
-      title: 'Withdrawal requested 💸',
+      title: "Withdrawal requested 💸",
       message: `Your withdrawal request of Rs. ${amount.toString()} is pending. Funds are held until approval.`,
-      relatedEntityType: 'WITHDRAWAL',
+      relatedEntityType: "WITHDRAWAL",
       relatedEntityId: result.id,
     });
 
@@ -161,7 +161,7 @@ export class WithdrawalsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.withdrawalRequest.count({ where }),
     ]);
@@ -185,7 +185,7 @@ export class WithdrawalsService {
       where: { id: withdrawalId, providerId },
     });
     if (!withdrawal) {
-      throw new NotFoundException('Withdrawal request not found');
+      throw new NotFoundException("Withdrawal request not found");
     }
     return withdrawal;
   }
@@ -197,7 +197,7 @@ export class WithdrawalsService {
       where: { id: withdrawalId, providerId },
     });
     if (!withdrawal) {
-      throw new NotFoundException('Withdrawal request not found');
+      throw new NotFoundException("Withdrawal request not found");
     }
     if (withdrawal.status !== WithdrawalStatus.PENDING) {
       throw new BadRequestException(
@@ -217,19 +217,19 @@ export class WithdrawalsService {
           withdrawal.walletId,
           withdrawal.amount,
           {
-            referenceType: 'WITHDRAWAL',
+            referenceType: "WITHDRAWAL",
             referenceId: withdrawalId,
             processingKey: `withdrawal-cancel:${withdrawalId}`,
-            description: 'Withdrawal cancelled by provider — funds released',
+            description: "Withdrawal cancelled by provider — funds released",
           },
         );
 
         await this.wallet.audit(tx, {
           walletId: withdrawal.walletId,
           actorUserId: providerId,
-          action: 'WITHDRAWAL_CANCELLED',
+          action: "WITHDRAWAL_CANCELLED",
           newValues: { amount: withdrawal.amount.toString(), withdrawalId },
-          referenceType: 'WITHDRAWAL',
+          referenceType: "WITHDRAWAL",
           referenceId: withdrawalId,
         });
 
@@ -238,9 +238,9 @@ export class WithdrawalsService {
       .catch((err: unknown) => {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
+          err.code === "P2002"
         ) {
-          throw new ConflictException('Withdrawal has already been cancelled');
+          throw new ConflictException("Withdrawal has already been cancelled");
         }
         throw err;
       });
@@ -248,14 +248,14 @@ export class WithdrawalsService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.WITHDRAWAL_CANCELLED,
-      title: 'Withdrawal cancelled ↩️',
+      title: "Withdrawal cancelled ↩️",
       message: `Your withdrawal of Rs. ${withdrawal.amount.toString()} was cancelled and funds returned to your available balance.`,
-      relatedEntityType: 'WITHDRAWAL',
+      relatedEntityType: "WITHDRAWAL",
       relatedEntityId: withdrawalId,
     });
 
     this.logger.log({
-      message: 'Withdrawal cancelled by provider',
+      message: "Withdrawal cancelled by provider",
       withdrawalId,
       providerId,
     });
@@ -276,11 +276,11 @@ export class WithdrawalsService {
             OR: [
               {
                 provider: {
-                  fullName: { contains: search, mode: 'insensitive' },
+                  fullName: { contains: search, mode: "insensitive" },
                 },
               },
-              { accountName: { contains: search, mode: 'insensitive' } },
-              { accountNumber: { contains: search, mode: 'insensitive' } },
+              { accountName: { contains: search, mode: "insensitive" } },
+              { accountNumber: { contains: search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -291,7 +291,7 @@ export class WithdrawalsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           provider: {
             select: { id: true, fullName: true, email: true, phone: true },
@@ -325,7 +325,7 @@ export class WithdrawalsService {
       },
     });
     if (!withdrawal) {
-      throw new NotFoundException('Withdrawal request not found');
+      throw new NotFoundException("Withdrawal request not found");
     }
     return withdrawal;
   }
@@ -337,7 +337,7 @@ export class WithdrawalsService {
       where: { id: withdrawalId },
     });
     if (!withdrawal) {
-      throw new NotFoundException('Withdrawal request not found');
+      throw new NotFoundException("Withdrawal request not found");
     }
     if (!ACTIVE_STATUSES.includes(withdrawal.status)) {
       throw new BadRequestException(
@@ -373,9 +373,9 @@ export class WithdrawalsService {
       data: {
         walletId: withdrawal.walletId,
         actorAdminId: adminId,
-        action: 'WITHDRAWAL_APPROVED',
+        action: "WITHDRAWAL_APPROVED",
         newValues: { withdrawalId, amount: withdrawal.amount.toString() },
-        referenceType: 'WITHDRAWAL',
+        referenceType: "WITHDRAWAL",
         referenceId: withdrawalId,
       },
     });
@@ -383,16 +383,16 @@ export class WithdrawalsService {
     void this.notifications.send({
       userId: withdrawal.providerId,
       type: NotificationType.WITHDRAWAL_APPROVED,
-      title: 'Withdrawal approved ✅',
+      title: "Withdrawal approved ✅",
       message: `Your withdrawal of Rs. ${withdrawal.amount.toString()} was approved and is being processed.`,
-      relatedEntityType: 'WITHDRAWAL',
+      relatedEntityType: "WITHDRAWAL",
       relatedEntityId: withdrawalId,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'WITHDRAWAL_APPROVED',
-      entityType: 'WITHDRAWAL',
+      action: "WITHDRAWAL_APPROVED",
+      entityType: "WITHDRAWAL",
       entityId: withdrawalId,
       newValues: {
         providerId: withdrawal.providerId,
@@ -429,16 +429,16 @@ export class WithdrawalsService {
     void this.notifications.send({
       userId: withdrawal.providerId,
       type: NotificationType.WITHDRAWAL_PROCESSING,
-      title: 'Withdrawal in progress ⏳',
+      title: "Withdrawal in progress ⏳",
       message: `Your withdrawal of Rs. ${withdrawal.amount.toString()} is being processed.`,
-      relatedEntityType: 'WITHDRAWAL',
+      relatedEntityType: "WITHDRAWAL",
       relatedEntityId: withdrawalId,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'WITHDRAWAL_PROCESSING',
-      entityType: 'WITHDRAWAL',
+      action: "WITHDRAWAL_PROCESSING",
+      entityType: "WITHDRAWAL",
       entityId: withdrawalId,
       newValues: {
         providerId: withdrawal.providerId,
@@ -479,19 +479,19 @@ export class WithdrawalsService {
           withdrawal.walletId,
           withdrawal.amount,
           {
-            referenceType: 'WITHDRAWAL',
+            referenceType: "WITHDRAWAL",
             referenceId: withdrawalId,
             processingKey: `withdrawal-complete:${withdrawalId}`,
-            description: 'Withdrawal paid out',
+            description: "Withdrawal paid out",
           },
         );
 
         await this.wallet.audit(tx, {
           walletId: withdrawal.walletId,
           actorAdminId: adminId,
-          action: 'WITHDRAWAL_COMPLETED',
+          action: "WITHDRAWAL_COMPLETED",
           newValues: { amount: withdrawal.amount.toString(), withdrawalId },
-          referenceType: 'WITHDRAWAL',
+          referenceType: "WITHDRAWAL",
           referenceId: withdrawalId,
         });
 
@@ -500,9 +500,9 @@ export class WithdrawalsService {
       .catch((err: unknown) => {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
+          err.code === "P2002"
         ) {
-          throw new ConflictException('Withdrawal has already been completed');
+          throw new ConflictException("Withdrawal has already been completed");
         }
         throw err;
       });
@@ -510,16 +510,16 @@ export class WithdrawalsService {
     void this.notifications.send({
       userId: withdrawal.providerId,
       type: NotificationType.WITHDRAWAL_COMPLETED,
-      title: 'Withdrawal completed 🎉',
+      title: "Withdrawal completed 🎉",
       message: `Your withdrawal of Rs. ${withdrawal.amount.toString()} has been paid out.`,
-      relatedEntityType: 'WITHDRAWAL',
+      relatedEntityType: "WITHDRAWAL",
       relatedEntityId: withdrawalId,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'WITHDRAWAL_COMPLETED',
-      entityType: 'WITHDRAWAL',
+      action: "WITHDRAWAL_COMPLETED",
+      entityType: "WITHDRAWAL",
       entityId: withdrawalId,
       newValues: {
         providerId: withdrawal.providerId,
@@ -528,7 +528,7 @@ export class WithdrawalsService {
     });
 
     this.logger.log({
-      message: 'Withdrawal completed',
+      message: "Withdrawal completed",
       withdrawalId,
       providerId: withdrawal.providerId,
       amount: withdrawal.amount.toString(),
@@ -563,7 +563,7 @@ export class WithdrawalsService {
           withdrawal.walletId,
           withdrawal.amount,
           {
-            referenceType: 'WITHDRAWAL',
+            referenceType: "WITHDRAWAL",
             referenceId: withdrawalId,
             processingKey: `withdrawal-reject:${withdrawalId}`,
             description: `Withdrawal rejected — funds released. Reason: ${reason}`,
@@ -573,13 +573,13 @@ export class WithdrawalsService {
         await this.wallet.audit(tx, {
           walletId: withdrawal.walletId,
           actorAdminId: adminId,
-          action: 'WITHDRAWAL_REJECTED',
+          action: "WITHDRAWAL_REJECTED",
           newValues: {
             amount: withdrawal.amount.toString(),
             withdrawalId,
             reason,
           },
-          referenceType: 'WITHDRAWAL',
+          referenceType: "WITHDRAWAL",
           referenceId: withdrawalId,
         });
 
@@ -588,9 +588,9 @@ export class WithdrawalsService {
       .catch((err: unknown) => {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
+          err.code === "P2002"
         ) {
-          throw new ConflictException('Withdrawal has already been rejected');
+          throw new ConflictException("Withdrawal has already been rejected");
         }
         throw err;
       });
@@ -598,16 +598,16 @@ export class WithdrawalsService {
     void this.notifications.send({
       userId: withdrawal.providerId,
       type: NotificationType.WITHDRAWAL_REJECTED,
-      title: 'Withdrawal rejected ❌',
+      title: "Withdrawal rejected ❌",
       message: `Your withdrawal of Rs. ${withdrawal.amount.toString()} was rejected. Reason: ${reason}. Funds returned to your available balance.`,
-      relatedEntityType: 'WITHDRAWAL',
+      relatedEntityType: "WITHDRAWAL",
       relatedEntityId: withdrawalId,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'WITHDRAWAL_REJECTED',
-      entityType: 'WITHDRAWAL',
+      action: "WITHDRAWAL_REJECTED",
+      entityType: "WITHDRAWAL",
       entityId: withdrawalId,
       newValues: {
         providerId: withdrawal.providerId,
@@ -617,7 +617,7 @@ export class WithdrawalsService {
     });
 
     this.logger.log({
-      message: 'Withdrawal rejected',
+      message: "Withdrawal rejected",
       withdrawalId,
       providerId: withdrawal.providerId,
       reason,

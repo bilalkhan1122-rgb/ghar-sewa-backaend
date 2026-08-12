@@ -1,17 +1,17 @@
-import { Module } from '@nestjs/common';
-import { PrismaModule } from 'src/prisma/prisma.module';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { AdminService } from './admin.service';
-import { AdminUsersService } from './admin-users.service';
-import { AdminNotificationsService } from './admin-notifications.service';
-import { AdminAuditService } from 'src/common/services/admin-audit.service';
-import { AdminDashboardController } from './admin-dashboard.controller';
-import { AdminReportsController } from './admin-reports.controller';
-import { AdminSearchController } from './admin-search.controller';
-import { AdminAuditController } from './admin-audit.controller';
-import { AdminUsersController } from './admin-users.controller';
-import { AdminProvidersController } from './admin-providers.controller';
-import { AdminNotificationsController } from './admin-notifications.controller';
+import { Module } from "@nestjs/common";
+import { PrismaModule } from "src/prisma/prisma.module";
+import { NotificationsModule } from "../notifications/notifications.module";
+import { AdminService } from "./admin.service";
+import { AdminUsersService } from "./admin-users.service";
+import { AdminNotificationsService } from "./admin-notifications.service";
+import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { AdminDashboardController } from "./admin-dashboard.controller";
+import { AdminReportsController } from "./admin-reports.controller";
+import { AdminSearchController } from "./admin-search.controller";
+import { AdminAuditController } from "./admin-audit.controller";
+import { AdminUsersController } from "./admin-users.controller";
+import { AdminProvidersController } from "./admin-providers.controller";
+import { AdminNotificationsController } from "./admin-notifications.controller";
 
 /**
  * Module 17 — Admin Dashboard.

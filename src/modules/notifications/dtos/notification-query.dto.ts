@@ -1,15 +1,15 @@
-import { IsOptional, IsEnum, IsBoolean } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { IsOptional, IsEnum, IsBoolean } from "class-validator";
+import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { PaginationDto } from "src/common/dtos/pagination.dto";
 import {
   NotificationType,
   NotificationCategory,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 export class NotificationQueryDto extends PaginationDto {
   @ApiPropertyOptional({
-    description: 'Filter by notification type',
+    description: "Filter by notification type",
     enum: NotificationType,
   })
   @IsOptional()
@@ -17,7 +17,7 @@ export class NotificationQueryDto extends PaginationDto {
   type?: NotificationType;
 
   @ApiPropertyOptional({
-    description: 'Filter by notification category',
+    description: "Filter by notification category",
     enum: NotificationCategory,
   })
   @IsOptional()
@@ -25,7 +25,7 @@ export class NotificationQueryDto extends PaginationDto {
   category?: NotificationCategory;
 
   @ApiPropertyOptional({
-    description: 'Filter by read status',
+    description: "Filter by read status",
     example: true,
   })
   @IsOptional()

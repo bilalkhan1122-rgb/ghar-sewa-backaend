@@ -7,14 +7,14 @@ import {
   IsInt,
   Min,
   Max,
-} from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class UpdateCategoryDto {
   @ApiPropertyOptional({
-    description: 'Category name',
-    example: 'Plumber',
+    description: "Category name",
+    example: "Plumber",
     minLength: 2,
     maxLength: 100,
   })
@@ -25,8 +25,8 @@ export class UpdateCategoryDto {
   name?: string;
 
   @ApiPropertyOptional({
-    description: 'Category slug (URL-friendly identifier)',
-    example: 'plumber',
+    description: "Category slug (URL-friendly identifier)",
+    example: "plumber",
     maxLength: 100,
   })
   @IsOptional()
@@ -35,8 +35,8 @@ export class UpdateCategoryDto {
   slug?: string;
 
   @ApiPropertyOptional({
-    description: 'Category description',
-    example: 'Pipe repair, faucet installation, water heater services',
+    description: "Category description",
+    example: "Pipe repair, faucet installation, water heater services",
     maxLength: 500,
   })
   @IsOptional()
@@ -45,8 +45,8 @@ export class UpdateCategoryDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Icon emoji or URL',
-    example: '🔧',
+    description: "Icon emoji or URL",
+    example: "🔧",
     maxLength: 255,
   })
   @IsOptional()
@@ -55,7 +55,7 @@ export class UpdateCategoryDto {
   icon?: string;
 
   @ApiPropertyOptional({
-    description: 'Whether the category is active',
+    description: "Whether the category is active",
     example: true,
   })
   @IsOptional()
@@ -63,7 +63,7 @@ export class UpdateCategoryDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Display order (lower = earlier)',
+    description: "Display order (lower = earlier)",
     example: 1,
   })
   @IsOptional()

@@ -3,10 +3,10 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Reflector } from "@nestjs/core";
+import { JwtService } from "@nestjs/jwt";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -17,7 +17,7 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>('isPublic', [
+    const isPublic = this.reflector.getAllAndOverride<boolean>("isPublic", [
       context.getHandler(),
       context.getClass(),
     ]);
@@ -30,21 +30,21 @@ export class AuthGuard implements CanActivate {
       cookies: Record<string, string>;
       user?: unknown;
     }>();
-    const token = request.cookies['accessToken'];
+    const token = request.cookies["accessToken"];
 
-    if (!token || typeof token !== 'string') {
-      throw new UnauthorizedException('Access Token missing or malformed');
+    if (!token || typeof token !== "string") {
+      throw new UnauthorizedException("Access Token missing or malformed");
     }
 
     try {
       const payload: unknown = await this.jwtService.verifyAsync(token, {
-        secret: this.config.get<string>('JWT_ACCESS_SECRET'),
+        secret: this.config.get<string>("JWT_ACCESS_SECRET"),
       });
 
       request.user = payload;
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid or expired Access Token');
+      throw new UnauthorizedException("Invalid or expired Access Token");
     }
   }
 }

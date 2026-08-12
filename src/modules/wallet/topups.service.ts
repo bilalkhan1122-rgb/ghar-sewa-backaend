@@ -3,21 +3,21 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
-} from '@nestjs/common';
-import { Logger } from 'nestjs-pino';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { AdminAuditService } from 'src/common/services/admin-audit.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { WalletService } from './wallet.service';
-import { CreateTopUpDto } from './dtos/create-topup.dto';
-import { TopUpQueryDto } from './dtos/topup-query.dto';
+} from "@nestjs/common";
+import { Logger } from "nestjs-pino";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { WalletService } from "./wallet.service";
+import { CreateTopUpDto } from "./dtos/create-topup.dto";
+import { TopUpQueryDto } from "./dtos/topup-query.dto";
 import {
   Prisma,
   TopUpStatus,
   WalletTransactionType,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /**
  * Module 14 — Manual wallet top-ups (Phase 1). Customer submits a request
@@ -48,7 +48,7 @@ export class TopUpsService {
     });
     if (pending) {
       throw new ConflictException(
-        'You already have a pending top-up request. Wait for it to be reviewed.',
+        "You already have a pending top-up request. Wait for it to be reviewed.",
       );
     }
 
@@ -72,7 +72,7 @@ export class TopUpsService {
 
     // Placeholder admin event — real admin queue/email system can hook here.
     this.logger.log({
-      eventType: 'ADMIN_TOPUP_SUBMITTED',
+      eventType: "ADMIN_TOPUP_SUBMITTED",
       topUpId: request.id,
       userId,
       amount: dto.amount,
@@ -81,9 +81,9 @@ export class TopUpsService {
     void this.notifications.send({
       userId,
       type: NotificationType.WALLET_TOPUP_SUBMITTED,
-      title: 'Top-up request submitted 📥',
+      title: "Top-up request submitted 📥",
       message: `Your top-up request of Rs. ${dto.amount} is pending review.`,
-      relatedEntityType: 'TOP_UP',
+      relatedEntityType: "TOP_UP",
       relatedEntityId: request.id,
     });
 
@@ -106,7 +106,7 @@ export class TopUpsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.topUpRequest.count({ where }),
     ]);
@@ -130,7 +130,7 @@ export class TopUpsService {
       where: { id: topUpId, userId },
     });
     if (!request) {
-      throw new NotFoundException('Top-up request not found');
+      throw new NotFoundException("Top-up request not found");
     }
     return request;
   }
@@ -150,7 +150,7 @@ export class TopUpsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           user: {
             select: { id: true, fullName: true, email: true, phone: true },
@@ -184,7 +184,7 @@ export class TopUpsService {
       },
     });
     if (!request) {
-      throw new NotFoundException('Top-up request not found');
+      throw new NotFoundException("Top-up request not found");
     }
     return request;
   }
@@ -195,7 +195,7 @@ export class TopUpsService {
       where: { id: topUpId },
     });
     if (!request) {
-      throw new NotFoundException('Top-up request not found');
+      throw new NotFoundException("Top-up request not found");
     }
     if (request.status !== TopUpStatus.PENDING) {
       throw new BadRequestException(
@@ -220,22 +220,22 @@ export class TopUpsService {
           WalletTransactionType.TOP_UP,
           request.amount,
           {
-            referenceType: 'TOP_UP',
+            referenceType: "TOP_UP",
             referenceId: topUpId,
             processingKey: `topup:${topUpId}`,
-            description: `Top-up approved${note ? ` — ${note}` : ''}`,
+            description: `Top-up approved${note ? ` — ${note}` : ""}`,
           },
         );
 
         await this.wallet.audit(tx, {
           walletId: request.walletId,
           actorAdminId: adminId,
-          action: 'TOPUP_APPROVED',
+          action: "TOPUP_APPROVED",
           newValues: {
             amount: request.amount.toString(),
             topUpId,
           },
-          referenceType: 'TOP_UP',
+          referenceType: "TOP_UP",
           referenceId: topUpId,
         });
 
@@ -244,9 +244,9 @@ export class TopUpsService {
       .catch((err: unknown) => {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
+          err.code === "P2002"
         ) {
-          throw new ConflictException('Top-up has already been approved');
+          throw new ConflictException("Top-up has already been approved");
         }
         throw err;
       });
@@ -254,22 +254,22 @@ export class TopUpsService {
     void this.notifications.send({
       userId: request.userId,
       type: NotificationType.WALLET_TOPUP_APPROVED,
-      title: 'Top-up approved ✅',
+      title: "Top-up approved ✅",
       message: `Rs. ${request.amount.toString()} has been added to your wallet.`,
-      relatedEntityType: 'TOP_UP',
+      relatedEntityType: "TOP_UP",
       relatedEntityId: topUpId,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'TOPUP_APPROVED',
-      entityType: 'TOP_UP',
+      action: "TOPUP_APPROVED",
+      entityType: "TOP_UP",
       entityId: topUpId,
       newValues: { userId: request.userId, amount: request.amount.toString() },
     });
 
     this.logger.log({
-      message: 'Top-up approved',
+      message: "Top-up approved",
       topUpId,
       userId: request.userId,
       amount: request.amount.toString(),
@@ -285,7 +285,7 @@ export class TopUpsService {
       where: { id: topUpId },
     });
     if (!request) {
-      throw new NotFoundException('Top-up request not found');
+      throw new NotFoundException("Top-up request not found");
     }
     if (request.status !== TopUpStatus.PENDING) {
       throw new BadRequestException(
@@ -306,22 +306,22 @@ export class TopUpsService {
     void this.notifications.send({
       userId: request.userId,
       type: NotificationType.WALLET_TOPUP_REJECTED,
-      title: 'Top-up rejected ❌',
+      title: "Top-up rejected ❌",
       message: `Your top-up request was rejected. Reason: ${reason}`,
-      relatedEntityType: 'TOP_UP',
+      relatedEntityType: "TOP_UP",
       relatedEntityId: topUpId,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'TOPUP_REJECTED',
-      entityType: 'TOP_UP',
+      action: "TOPUP_REJECTED",
+      entityType: "TOP_UP",
       entityId: topUpId,
       newValues: { userId: request.userId, reason },
     });
 
     this.logger.log({
-      message: 'Top-up rejected',
+      message: "Top-up rejected",
       topUpId,
       userId: request.userId,
       reason,

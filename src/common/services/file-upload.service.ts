@@ -1,9 +1,9 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
-import { randomUUID } from 'crypto';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as fsPromises from 'fs/promises';
-import { put, del } from '@vercel/blob';
+import { Injectable, BadRequestException, Logger } from "@nestjs/common";
+import { randomUUID } from "crypto";
+import * as path from "path";
+import * as fs from "fs";
+import * as fsPromises from "fs/promises";
+import { put, del } from "@vercel/blob";
 
 /** Longest edge kept after downscaling, in pixels. */
 const MAX_IMAGE_DIMENSION = 1280;
@@ -27,27 +27,27 @@ export class FileUploadService {
   private readonly uploadsDir: string;
   private readonly maxFileSize = 5 * 1024 * 1024; // 5MB
   private readonly allowedMimeTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-    'image/gif',
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
   ];
   // Evidence & appeal files may be images, videos or documents (up to 10MB)
   private readonly maxEvidenceFileSize = 10 * 1024 * 1024; // 10MB
   private readonly allowedEvidenceMimeTypes = [
-    'image/jpeg',
-    'image/png',
-    'image/webp',
-    'image/gif',
-    'video/mp4',
-    'video/webm',
-    'video/quicktime',
-    'application/pdf',
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "application/pdf",
   ];
   private dirsEnsured = false;
 
   constructor() {
-    this.uploadsDir = path.join(process.cwd(), 'uploads');
+    this.uploadsDir = path.join(process.cwd(), "uploads");
     if (!this.usesBlobStorage) {
       this.ensureUploadsDirSync();
     }
@@ -57,14 +57,14 @@ export class FileUploadService {
     if (this.dirsEnsured) return;
     try {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'profiles'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'gallery'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'cnic'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'faces'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'chat'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'evidence'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'appeals'), { recursive: true });
-      fs.mkdirSync(path.join(this.uploadsDir, 'topups'), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "profiles"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "gallery"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "cnic"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "faces"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "chat"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "evidence"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "appeals"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "topups"), { recursive: true });
       this.dirsEnsured = true;
     } catch {
       // Directories already exist
@@ -74,12 +74,12 @@ export class FileUploadService {
 
   validateFile(file: Express.Multer.File): void {
     if (!file) {
-      throw new BadRequestException('No file provided');
+      throw new BadRequestException("No file provided");
     }
 
     if (!this.allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Invalid file type. Allowed types: ${this.allowedMimeTypes.join(', ')}`,
+        `Invalid file type. Allowed types: ${this.allowedMimeTypes.join(", ")}`,
       );
     }
 
@@ -92,27 +92,27 @@ export class FileUploadService {
 
   async uploadProfilePhoto(file: Express.Multer.File): Promise<string> {
     this.validateFile(file);
-    return this.saveFile(file, 'profiles');
+    return this.saveFile(file, "profiles");
   }
 
   async uploadGalleryImage(file: Express.Multer.File): Promise<string> {
     this.validateFile(file);
-    return this.saveFile(file, 'gallery');
+    return this.saveFile(file, "gallery");
   }
 
   async uploadFacePhoto(file: Express.Multer.File): Promise<string> {
     this.validateFile(file);
-    return this.saveFile(file, 'faces');
+    return this.saveFile(file, "faces");
   }
 
   async uploadCnicImage(file: Express.Multer.File): Promise<string> {
     this.validateFile(file);
-    return this.saveFile(file, 'cnic');
+    return this.saveFile(file, "cnic");
   }
 
   async uploadChatImage(file: Express.Multer.File): Promise<string> {
     this.validateFile(file);
-    return this.saveFile(file, 'chat');
+    return this.saveFile(file, "chat");
   }
 
   /**
@@ -121,12 +121,12 @@ export class FileUploadService {
    */
   validateEvidenceFile(file: Express.Multer.File): void {
     if (!file) {
-      throw new BadRequestException('No file provided');
+      throw new BadRequestException("No file provided");
     }
 
     if (!this.allowedEvidenceMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Invalid file type. Allowed types: ${this.allowedEvidenceMimeTypes.join(', ')}`,
+        `Invalid file type. Allowed types: ${this.allowedEvidenceMimeTypes.join(", ")}`,
       );
     }
 
@@ -139,17 +139,17 @@ export class FileUploadService {
 
   async uploadEvidenceFile(file: Express.Multer.File): Promise<string> {
     this.validateEvidenceFile(file);
-    return this.saveFile(file, 'evidence');
+    return this.saveFile(file, "evidence");
   }
 
   async uploadAppealFile(file: Express.Multer.File): Promise<string> {
     this.validateEvidenceFile(file);
-    return this.saveFile(file, 'appeals');
+    return this.saveFile(file, "appeals");
   }
 
   async uploadTopUpProof(file: Express.Multer.File): Promise<string> {
     this.validateEvidenceFile(file);
-    return this.saveFile(file, 'topups');
+    return this.saveFile(file, "topups");
   }
 
   /**
@@ -166,15 +166,15 @@ export class FileUploadService {
     const original = {
       buffer: file.buffer,
       mimetype: file.mimetype,
-      ext: path.extname(file.originalname) || '.jpg',
+      ext: path.extname(file.originalname) || ".jpg",
     };
 
-    if (!file.mimetype?.startsWith('image/')) {
+    if (!file.mimetype?.startsWith("image/")) {
       return original;
     }
 
     try {
-      const sharp = (await import('sharp')).default;
+      const sharp = (await import("sharp")).default;
       const buffer = await sharp(file.buffer)
         // Honour the EXIF orientation flag, otherwise phone photos that rely
         // on it come out rotated once the metadata is dropped.
@@ -182,13 +182,13 @@ export class FileUploadService {
         .resize({
           width: MAX_IMAGE_DIMENSION,
           height: MAX_IMAGE_DIMENSION,
-          fit: 'inside',
+          fit: "inside",
           withoutEnlargement: true,
         })
         .jpeg({ quality: IMAGE_QUALITY, mozjpeg: true })
         .toBuffer();
 
-      return { buffer, mimetype: 'image/jpeg', ext: '.jpg' };
+      return { buffer, mimetype: "image/jpeg", ext: ".jpg" };
     } catch (error) {
       this.logger.warn(
         `Image compression skipped, storing original: ${
@@ -213,7 +213,7 @@ export class FileUploadService {
 
     if (this.usesBlobStorage) {
       const blob = await put(`${subDir}/${filename}`, buffer, {
-        access: 'public',
+        access: "public",
         contentType: mimetype,
         token: this.blobToken,
         // The filename is already a UUID; a second random suffix would only
@@ -244,11 +244,11 @@ export class FileUploadService {
       return;
     }
 
-    if (!fileUrl.startsWith('/uploads/')) {
+    if (!fileUrl.startsWith("/uploads/")) {
       return;
     }
 
-    const relativePath = fileUrl.replace('/uploads/', '');
+    const relativePath = fileUrl.replace("/uploads/", "");
     const filePath = path.join(this.uploadsDir, relativePath);
 
     try {

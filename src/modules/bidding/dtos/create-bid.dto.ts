@@ -6,20 +6,20 @@ import {
   Max,
   MaxLength,
   IsUUID,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CreateBidDto {
   @ApiProperty({
-    description: 'Job ID to bid on',
-    example: 'uuid-here',
+    description: "Job ID to bid on",
+    example: "uuid-here",
   })
-  @IsUUID('4')
+  @IsUUID("4")
   jobId: string;
 
   @ApiProperty({
-    description: 'Offered price in PKR',
+    description: "Offered price in PKR",
     example: 1200,
     minimum: 1,
     maximum: 9999999,
@@ -31,8 +31,8 @@ export class CreateBidDto {
   offeredPrice: number;
 
   @ApiPropertyOptional({
-    description: 'Optional message to the customer',
-    example: 'I can do this job. I have 5 years of experience.',
+    description: "Optional message to the customer",
+    example: "I can do this job. I have 5 years of experience.",
     maxLength: 500,
   })
   @IsOptional()

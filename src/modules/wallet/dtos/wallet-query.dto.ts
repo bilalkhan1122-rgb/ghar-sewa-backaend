@@ -1,7 +1,7 @@
-import { IsOptional, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PaginationDto } from 'src/common/dtos/pagination.dto';
-import { WalletType, WalletStatus } from 'generated/prisma/client';
+import { IsOptional, IsEnum } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { PaginationDto } from "src/common/dtos/pagination.dto";
+import { WalletType, WalletStatus } from "generated/prisma/client";
 
 export class WalletQueryDto extends PaginationDto {
   @ApiPropertyOptional({ enum: WalletType })

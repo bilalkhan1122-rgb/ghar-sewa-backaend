@@ -4,35 +4,36 @@ import {
   IsString,
   IsEnum,
   IsNumber,
+  IsBoolean,
   Min,
-} from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PaginationDto } from 'src/common/dtos/pagination.dto';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { PaginationDto } from "src/common/dtos/pagination.dto";
+import { Type } from "class-transformer";
 
 export enum JobSortField {
-  CREATED_AT = 'createdAt',
-  OFFERED_PRICE = 'offeredPrice',
+  CREATED_AT = "createdAt",
+  OFFERED_PRICE = "offeredPrice",
 }
 
 export class JobQueryDto extends PaginationDto {
   @ApiPropertyOptional({
-    description: 'Filter by job status',
-    example: 'PENDING',
+    description: "Filter by job status",
+    example: "PENDING",
   })
   @IsOptional()
   @IsString()
   status?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by category ID',
+    description: "Filter by category ID",
   })
   @IsOptional()
   @IsString()
   categoryId?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by minimum offered price',
+    description: "Filter by minimum offered price",
     example: 500,
   })
   @IsOptional()
@@ -42,7 +43,7 @@ export class JobQueryDto extends PaginationDto {
   minPrice?: number;
 
   @ApiPropertyOptional({
-    description: 'Filter by maximum offered price',
+    description: "Filter by maximum offered price",
     example: 10000,
   })
   @IsOptional()
@@ -52,7 +53,16 @@ export class JobQueryDto extends PaginationDto {
   maxPrice?: number;
 
   @ApiPropertyOptional({
-    description: 'Sort field',
+    description: "Filter urgent jobs only (Module 20)",
+    example: true,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isUrgent?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Sort field",
     enum: JobSortField,
     default: JobSortField.CREATED_AT,
   })
@@ -61,49 +71,49 @@ export class JobQueryDto extends PaginationDto {
   sortBy?: JobSortField = JobSortField.CREATED_AT;
 
   @ApiPropertyOptional({
-    description: 'Sort order',
-    enum: ['asc', 'desc'],
-    default: 'desc',
+    description: "Sort order",
+    enum: ["asc", "desc"],
+    default: "desc",
   })
   @IsOptional()
   @IsString()
-  sortOrder?: 'asc' | 'desc' = 'desc';
+  sortOrder?: "asc" | "desc" = "desc";
 
   @ApiPropertyOptional({
-    description: 'Search by title or description (admin)',
+    description: "Search by title or description (admin)",
   })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by customer ID (admin)' })
+  @ApiPropertyOptional({ description: "Filter by customer ID (admin)" })
   @IsOptional()
   @IsString()
   customerId?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by provider ID via bookings (admin)',
+    description: "Filter by provider ID via bookings (admin)",
   })
   @IsOptional()
   @IsString()
   providerId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by customer city ID (admin)' })
+  @ApiPropertyOptional({ description: "Filter by customer city ID (admin)" })
   @IsOptional()
   @IsString()
   cityId?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by date range start (ISO, admin)',
-    example: '2026-01-01',
+    description: "Filter by date range start (ISO, admin)",
+    example: "2026-01-01",
   })
   @IsOptional()
   @IsISO8601()
   dateFrom?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by date range end (ISO, admin)',
-    example: '2026-12-31',
+    description: "Filter by date range end (ISO, admin)",
+    example: "2026-12-31",
   })
   @IsOptional()
   @IsISO8601()

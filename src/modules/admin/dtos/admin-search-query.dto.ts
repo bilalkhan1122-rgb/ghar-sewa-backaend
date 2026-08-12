@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type } from "class-transformer";
 import {
   IsInt,
   IsNotEmpty,
@@ -7,17 +7,17 @@ import {
   Max,
   MaxLength,
   Min,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class AdminSearchQueryDto {
-  @ApiProperty({ description: 'Search query', example: 'Ahmed' })
+  @ApiProperty({ description: "Search query", example: "Ahmed" })
   @IsString()
-  @IsNotEmpty({ message: 'Search query is required' })
+  @IsNotEmpty({ message: "Search query is required" })
   @MaxLength(100)
   q!: string;
 
-  @ApiPropertyOptional({ description: 'Max results per entity', default: 10 })
+  @ApiPropertyOptional({ description: "Max results per entity", default: 10 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

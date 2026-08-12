@@ -1,10 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class RejectTopUpDto {
-  @ApiProperty({ description: 'Rejection reason (mandatory)' })
+  @ApiProperty({ description: "Rejection reason (mandatory)" })
   @IsString()
-  @IsNotEmpty({ message: 'Rejection reason is required' })
+  @IsNotEmpty({ message: "Rejection reason is required" })
   @MaxLength(500)
   reason!: string;
 }

@@ -2,14 +2,14 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
-} from '@nestjs/common';
-import { Logger } from 'nestjs-pino';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { AdminAuditService } from 'src/common/services/admin-audit.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { AdminUserQueryDto } from './dtos/admin-user-query.dto';
-import { AdminProviderQueryDto } from './dtos/admin-provider-query.dto';
-import { buildDateRange } from './dtos/date-range.dto';
+} from "@nestjs/common";
+import { Logger } from "nestjs-pino";
+import { PrismaService } from "src/prisma/prisma.service";
+import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { AdminUserQueryDto } from "./dtos/admin-user-query.dto";
+import { AdminProviderQueryDto } from "./dtos/admin-provider-query.dto";
+import { buildDateRange } from "./dtos/date-range.dto";
 import {
   Prisma,
   User,
@@ -17,7 +17,7 @@ import {
   UserStatus,
   WalletTransactionType,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /**
  * Module 17 — Admin User & Provider Management.
@@ -49,7 +49,7 @@ export class AdminUsersService {
       dateTo,
     } = query;
     const skip = (page - 1) * limit;
-    const deletedOnly = deleted === 'true';
+    const deletedOnly = deleted === "true";
 
     const where: Prisma.UserWhereInput = {
       ...(role && { role }),
@@ -62,9 +62,9 @@ export class AdminUsersService {
       ...(search
         ? {
             OR: [
-              { fullName: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search, mode: 'insensitive' } },
+              { fullName: { contains: search, mode: "insensitive" } },
+              { email: { contains: search, mode: "insensitive" } },
+              { phone: { contains: search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -75,7 +75,7 @@ export class AdminUsersService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           city: { select: { id: true, name: true } },
           wallet: {
@@ -124,7 +124,7 @@ export class AdminUsersService {
       },
     });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     const [jobCount, bookingCount, disputeCount, penaltyCount, reviewCount] =
@@ -155,10 +155,10 @@ export class AdminUsersService {
   async suspendUser(adminId: string, userId: string, reason: string) {
     const user = await this.getUserOrThrow(userId);
     if (user.role === UserRole.ADMIN) {
-      throw new BadRequestException('Admins cannot be suspended');
+      throw new BadRequestException("Admins cannot be suspended");
     }
     if (user.status === UserStatus.SUSPENDED) {
-      throw new BadRequestException('User is already suspended');
+      throw new BadRequestException("User is already suspended");
     }
 
     const updated = await this.prisma.user.update({
@@ -169,8 +169,8 @@ export class AdminUsersService {
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
     await this.audit.record({
       adminId,
-      action: 'USER_SUSPENDED',
-      entityType: 'USER',
+      action: "USER_SUSPENDED",
+      entityType: "USER",
       entityId: userId,
       previousValues: { status: user.status },
       newValues: { status: UserStatus.SUSPENDED, reason },
@@ -178,26 +178,26 @@ export class AdminUsersService {
     void this.notifications.send({
       userId,
       type: NotificationType.SYSTEM_ANNOUNCEMENT,
-      title: 'Account suspended ⚠️',
+      title: "Account suspended ⚠️",
       message: `Your account has been suspended. Reason: ${reason}`,
-      relatedEntityType: 'USER',
+      relatedEntityType: "USER",
       relatedEntityId: userId,
       force: true,
     });
     this.logger.log({
-      message: 'User suspended by admin',
+      message: "User suspended by admin",
       adminId,
       userId,
       reason,
     });
 
-    return { message: 'User suspended', user: this.sanitize(updated) };
+    return { message: "User suspended", user: this.sanitize(updated) };
   }
 
   async unsuspendUser(adminId: string, userId: string) {
     const user = await this.getUserOrThrow(userId);
     if (user.status !== UserStatus.SUSPENDED) {
-      throw new BadRequestException('User is not suspended');
+      throw new BadRequestException("User is not suspended");
     }
 
     const updated = await this.prisma.user.update({
@@ -207,8 +207,8 @@ export class AdminUsersService {
 
     await this.audit.record({
       adminId,
-      action: 'USER_UNSUSPENDED',
-      entityType: 'USER',
+      action: "USER_UNSUSPENDED",
+      entityType: "USER",
       entityId: userId,
       previousValues: { status: user.status },
       newValues: { status: UserStatus.ACTIVE },
@@ -216,23 +216,23 @@ export class AdminUsersService {
     void this.notifications.send({
       userId,
       type: NotificationType.SYSTEM_ANNOUNCEMENT,
-      title: 'Account reactivated ✅',
-      message: 'Your account has been reactivated.',
-      relatedEntityType: 'USER',
+      title: "Account reactivated ✅",
+      message: "Your account has been reactivated.",
+      relatedEntityType: "USER",
       relatedEntityId: userId,
       force: true,
     });
 
-    return { message: 'User unsuspended', user: this.sanitize(updated) };
+    return { message: "User unsuspended", user: this.sanitize(updated) };
   }
 
   async softDeleteUser(adminId: string, userId: string, reason: string) {
     const user = await this.getUserOrThrow(userId);
     if (user.role === UserRole.ADMIN) {
-      throw new BadRequestException('Admins cannot be deleted');
+      throw new BadRequestException("Admins cannot be deleted");
     }
     if (!user.isActive) {
-      throw new BadRequestException('User is already deleted');
+      throw new BadRequestException("User is already deleted");
     }
 
     const updated = await this.prisma.user.update({
@@ -243,20 +243,20 @@ export class AdminUsersService {
 
     await this.audit.record({
       adminId,
-      action: 'USER_DELETED',
-      entityType: 'USER',
+      action: "USER_DELETED",
+      entityType: "USER",
       entityId: userId,
       previousValues: { isActive: true, deletedAt: null },
       newValues: { isActive: false, deletedAt: updated.deletedAt, reason },
     });
 
-    return { message: 'User soft-deleted', user: this.sanitize(updated) };
+    return { message: "User soft-deleted", user: this.sanitize(updated) };
   }
 
   async restoreUser(adminId: string, userId: string) {
     const user = await this.getUserOrThrow(userId);
     if (user.isActive) {
-      throw new BadRequestException('User is not deleted');
+      throw new BadRequestException("User is not deleted");
     }
 
     const updated = await this.prisma.user.update({
@@ -266,14 +266,14 @@ export class AdminUsersService {
 
     await this.audit.record({
       adminId,
-      action: 'USER_RESTORED',
-      entityType: 'USER',
+      action: "USER_RESTORED",
+      entityType: "USER",
       entityId: userId,
       previousValues: { isActive: false },
       newValues: { isActive: true, deletedAt: null },
     });
 
-    return { message: 'User restored', user: this.sanitize(updated) };
+    return { message: "User restored", user: this.sanitize(updated) };
   }
 
   // ─── Provider Management ─────────────────────────────────────────────
@@ -290,9 +290,9 @@ export class AdminUsersService {
       ...(search
         ? {
             OR: [
-              { fullName: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search, mode: 'insensitive' } },
+              { fullName: { contains: search, mode: "insensitive" } },
+              { email: { contains: search, mode: "insensitive" } },
+              { phone: { contains: search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -303,7 +303,7 @@ export class AdminUsersService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           providerProfile: { select: { hourlyRate: true, cnicNumber: true } },
           wallet: {
@@ -343,21 +343,21 @@ export class AdminUsersService {
         },
         wallet: true,
         ratingSummary: true,
-        verificationRequests: { orderBy: { submittedAt: 'desc' } },
+        verificationRequests: { orderBy: { submittedAt: "desc" } },
       },
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     const [completedJobs, activeBookings, cancellationCount, penaltyCount] =
       await Promise.all([
         this.prisma.booking.count({
-          where: { providerId, status: 'COMPLETED' },
+          where: { providerId, status: "COMPLETED" },
         }),
         this.prisma.booking.count({
-          where: { providerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+          where: { providerId, status: { in: ["ACCEPTED", "IN_PROGRESS"] } },
         }),
         this.prisma.cancellationRecord.count({
           where: { booking: { providerId } },
@@ -376,11 +376,11 @@ export class AdminUsersService {
       where: { userId: providerId },
     });
     if (!profile) {
-      throw new NotFoundException('Provider profile not found');
+      throw new NotFoundException("Provider profile not found");
     }
     const requests = await this.prisma.verificationRequest.findMany({
       where: { providerId },
-      orderBy: { submittedAt: 'desc' },
+      orderBy: { submittedAt: "desc" },
       select: {
         id: true,
         status: true,
@@ -411,28 +411,28 @@ export class AdminUsersService {
       include: { wallet: true, ratingSummary: true },
     });
     if (!provider || provider.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     const [completedJobs, activeBookings, cancellations, penalties, earnings] =
       await Promise.all([
         this.prisma.booking.count({
-          where: { providerId, status: 'COMPLETED' },
+          where: { providerId, status: "COMPLETED" },
         }),
         this.prisma.booking.count({
-          where: { providerId, status: { in: ['ACCEPTED', 'IN_PROGRESS'] } },
+          where: { providerId, status: { in: ["ACCEPTED", "IN_PROGRESS"] } },
         }),
         this.prisma.cancellationRecord.count({
           where: { booking: { providerId } },
         }),
         this.prisma.providerPenalty.findMany({
           where: { providerId },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           take: 10,
         }),
         this.prisma.walletTransaction.aggregate({
           where: {
-            walletId: provider.wallet?.id ?? '__none__',
+            walletId: provider.wallet?.id ?? "__none__",
             type: WalletTransactionType.PROVIDER_EARNING,
           },
           _sum: { amount: true },
@@ -459,10 +459,10 @@ export class AdminUsersService {
       where: { id: providerId },
     });
     if (!provider || provider.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
     if (provider.status === UserStatus.SUSPENDED) {
-      throw new BadRequestException('Provider is already suspended');
+      throw new BadRequestException("Provider is already suspended");
     }
 
     const updated = await this.prisma.user.update({
@@ -475,8 +475,8 @@ export class AdminUsersService {
 
     await this.audit.record({
       adminId,
-      action: 'PROVIDER_SUSPENDED',
-      entityType: 'PROVIDER',
+      action: "PROVIDER_SUSPENDED",
+      entityType: "PROVIDER",
       entityId: providerId,
       previousValues: { status: provider.status },
       newValues: { status: UserStatus.SUSPENDED, reason },
@@ -484,14 +484,14 @@ export class AdminUsersService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.SYSTEM_ANNOUNCEMENT,
-      title: 'Account suspended ⚠️',
+      title: "Account suspended ⚠️",
       message: `Your provider account has been suspended. Reason: ${reason}`,
-      relatedEntityType: 'PROVIDER',
+      relatedEntityType: "PROVIDER",
       relatedEntityId: providerId,
       force: true,
     });
 
-    return { message: 'Provider suspended', provider: this.sanitize(updated) };
+    return { message: "Provider suspended", provider: this.sanitize(updated) };
   }
 
   async unsuspendProvider(adminId: string, providerId: string) {
@@ -499,10 +499,10 @@ export class AdminUsersService {
       where: { id: providerId },
     });
     if (!provider || provider.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
     if (provider.status !== UserStatus.SUSPENDED) {
-      throw new BadRequestException('Provider is not suspended');
+      throw new BadRequestException("Provider is not suspended");
     }
 
     const updated = await this.prisma.user.update({
@@ -512,8 +512,8 @@ export class AdminUsersService {
 
     await this.audit.record({
       adminId,
-      action: 'PROVIDER_UNSUSPENDED',
-      entityType: 'PROVIDER',
+      action: "PROVIDER_UNSUSPENDED",
+      entityType: "PROVIDER",
       entityId: providerId,
       previousValues: { status: provider.status },
       newValues: { status: UserStatus.ACTIVE },
@@ -521,15 +521,15 @@ export class AdminUsersService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.SYSTEM_ANNOUNCEMENT,
-      title: 'Account reactivated ✅',
-      message: 'Your provider account has been reactivated.',
-      relatedEntityType: 'PROVIDER',
+      title: "Account reactivated ✅",
+      message: "Your provider account has been reactivated.",
+      relatedEntityType: "PROVIDER",
       relatedEntityId: providerId,
       force: true,
     });
 
     return {
-      message: 'Provider unsuspended',
+      message: "Provider unsuspended",
       provider: this.sanitize(updated),
     };
   }
@@ -539,7 +539,7 @@ export class AdminUsersService {
   private async getUserOrThrow(userId: string): Promise<User> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
     return user;
   }

@@ -4,14 +4,14 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
-} from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { CreateAppealDto } from './dtos/create-appeal.dto';
-import { PenaltyQueryDto, AppealQueryDto } from './dtos/penalty-query.dto';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { Cron } from "@nestjs/schedule";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { CreateAppealDto } from "./dtos/create-appeal.dto";
+import { PenaltyQueryDto, AppealQueryDto } from "./dtos/penalty-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   UserRole,
@@ -21,7 +21,7 @@ import {
   AppealStatus,
   NotificationType,
   CancellationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /** Second offence only counts inside a rolling 30-day window. */
 export const PENALTY_WINDOW_DAYS = 30;
@@ -30,7 +30,7 @@ export const SUSPENSION_DAYS = 7;
 
 const PROVIDER_CANCELLATION_WHERE: Prisma.CancellationRecordWhereInput = {
   OR: [
-    { cancelledBy: 'PROVIDER' },
+    { cancelledBy: "PROVIDER" },
     { cancellationType: CancellationType.PROVIDER },
   ],
 };
@@ -139,7 +139,7 @@ export class PenaltiesService {
     });
 
     this.logger.log({
-      message: 'Provider penalty applied',
+      message: "Provider penalty applied",
       providerId,
       cancellationId,
       penaltyId: penalty.id,
@@ -155,16 +155,16 @@ export class PenaltiesService {
       [PenaltyType.PERMANENT_BAN]: NotificationType.PENALTY_PERMANENT_BAN,
     };
     const titleMap: Record<PenaltyType, string> = {
-      [PenaltyType.WARNING]: 'Cancellation warning ⚠️',
-      [PenaltyType.TEMPORARY_BAN]: 'Account suspended 🕒',
-      [PenaltyType.PERMANENT_BAN]: 'Account permanently banned 🚫',
+      [PenaltyType.WARNING]: "Cancellation warning ⚠️",
+      [PenaltyType.TEMPORARY_BAN]: "Account suspended 🕒",
+      [PenaltyType.PERMANENT_BAN]: "Account permanently banned 🚫",
     };
     const messageMap: Record<PenaltyType, string> = {
       [PenaltyType.WARNING]:
-        'You received a warning for cancelling an accepted job. Repeated cancellations lead to suspension.',
+        "You received a warning for cancelling an accepted job. Repeated cancellations lead to suspension.",
       [PenaltyType.TEMPORARY_BAN]: `You are suspended from taking new jobs for ${SUSPENSION_DAYS} days due to repeated cancellations.`,
       [PenaltyType.PERMANENT_BAN]:
-        'Your account has been permanently banned due to repeated cancellations.',
+        "Your account has been permanently banned due to repeated cancellations.",
     };
 
     void this.notifications.send({
@@ -172,7 +172,7 @@ export class PenaltiesService {
       type: notificationMap[penaltyType],
       title: titleMap[penaltyType],
       message: messageMap[penaltyType],
-      relatedEntityType: 'PENALTY',
+      relatedEntityType: "PENALTY",
       relatedEntityId: penalty.id,
     });
 
@@ -191,12 +191,12 @@ export class PenaltiesService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     if (user.verificationStatus === VerificationStatus.BANNED) {
       throw new ForbiddenException(
-        'Your account is banned. You cannot participate in new jobs.',
+        "Your account is banned. You cannot participate in new jobs.",
       );
     }
 
@@ -231,7 +231,7 @@ export class PenaltiesService {
 
     if (user.status === UserStatus.BANNED) {
       throw new ForbiddenException(
-        'Your account is banned. You cannot participate in new jobs.',
+        "Your account is banned. You cannot participate in new jobs.",
       );
     }
   }
@@ -240,7 +240,7 @@ export class PenaltiesService {
    * Scheduled job (daily) that expires finished suspensions and restores
    * providers to ACTIVE.
    */
-  @Cron('5 0 * * *')
+  @Cron("5 0 * * *")
   async expireSuspensions(): Promise<number> {
     const expired = await this.prisma.providerPenalty.findMany({
       where: {
@@ -257,7 +257,7 @@ export class PenaltiesService {
 
     if (expired.length > 0) {
       this.logger.log({
-        message: 'Expired provider suspensions',
+        message: "Expired provider suspensions",
         count: expired.length,
       });
     }
@@ -280,9 +280,9 @@ export class PenaltiesService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.PENALTY_SUSPENSION_ENDED,
-      title: 'Suspension lifted ✅',
-      message: 'Your suspension has ended. You can accept new jobs again.',
-      relatedEntityType: 'PENALTY',
+      title: "Suspension lifted ✅",
+      message: "Your suspension has ended. You can accept new jobs again.",
+      relatedEntityType: "PENALTY",
       relatedEntityId: penaltyId,
     });
   }
@@ -303,7 +303,7 @@ export class PenaltiesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           cancellations: {
             select: {
@@ -336,7 +336,7 @@ export class PenaltiesService {
   async getActivePenalties(providerId: string) {
     return this.prisma.providerPenalty.findMany({
       where: { providerId, active: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -354,7 +354,7 @@ export class PenaltiesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { penalty: true },
       }),
       this.prisma.cancellationRecord.count({ where }),
@@ -387,7 +387,7 @@ export class PenaltiesService {
     });
 
     if (!penalty || penalty.providerId !== providerId) {
-      throw new NotFoundException('Penalty not found');
+      throw new NotFoundException("Penalty not found");
     }
 
     const existing = await this.prisma.appeal.findFirst({
@@ -395,7 +395,7 @@ export class PenaltiesService {
     });
     if (existing) {
       throw new ConflictException(
-        'An appeal for this penalty is already pending',
+        "An appeal for this penalty is already pending",
       );
     }
 
@@ -417,7 +417,7 @@ export class PenaltiesService {
     });
 
     this.logger.log({
-      message: 'Appeal submitted',
+      message: "Appeal submitted",
       appealId: appeal.id,
       providerId,
       penaltyId: dto.penaltyId,
@@ -433,7 +433,7 @@ export class PenaltiesService {
     });
 
     if (!appeal) {
-      throw new NotFoundException('Appeal not found');
+      throw new NotFoundException("Appeal not found");
     }
 
     return appeal;
@@ -453,7 +453,7 @@ export class PenaltiesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { penalty: true },
       }),
       this.prisma.appeal.count({ where }),
@@ -489,7 +489,7 @@ export class PenaltiesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           penalty: true,
           provider: {
@@ -527,7 +527,7 @@ export class PenaltiesService {
     });
 
     if (!appeal) {
-      throw new NotFoundException('Appeal not found');
+      throw new NotFoundException("Appeal not found");
     }
 
     return appeal;
@@ -540,7 +540,7 @@ export class PenaltiesService {
     });
 
     if (!appeal) {
-      throw new NotFoundException('Appeal not found');
+      throw new NotFoundException("Appeal not found");
     }
 
     if (appeal.status !== AppealStatus.PENDING) {
@@ -588,23 +588,23 @@ export class PenaltiesService {
     void this.notifications.send({
       userId: appeal.providerId,
       type: NotificationType.APPEAL_APPROVED,
-      title: 'Appeal approved ✅',
+      title: "Appeal approved ✅",
       message:
         appeal.penalty.penaltyType === PenaltyType.PERMANENT_BAN
-          ? 'Your appeal was approved and your ban has been lifted. Please re-submit your profile for verification.'
-          : 'Your appeal was approved and the penalty has been lifted.',
-      relatedEntityType: 'APPEAL',
+          ? "Your appeal was approved and your ban has been lifted. Please re-submit your profile for verification."
+          : "Your appeal was approved and the penalty has been lifted.",
+      relatedEntityType: "APPEAL",
       relatedEntityId: appealId,
     });
 
     this.logger.log({
-      message: 'Appeal approved',
+      message: "Appeal approved",
       appealId,
       reviewedBy: adminId,
       penaltyId: appeal.penaltyId,
     });
 
-    return { message: 'Appeal approved', appealId };
+    return { message: "Appeal approved", appealId };
   }
 
   async adminRejectAppeal(adminId: string, appealId: string, note: string) {
@@ -613,7 +613,7 @@ export class PenaltiesService {
     });
 
     if (!appeal) {
-      throw new NotFoundException('Appeal not found');
+      throw new NotFoundException("Appeal not found");
     }
 
     if (appeal.status !== AppealStatus.PENDING) {
@@ -635,20 +635,20 @@ export class PenaltiesService {
     void this.notifications.send({
       userId: appeal.providerId,
       type: NotificationType.APPEAL_REJECTED,
-      title: 'Appeal rejected ❌',
+      title: "Appeal rejected ❌",
       message: `Your appeal was rejected. Note: ${note}`,
-      relatedEntityType: 'APPEAL',
+      relatedEntityType: "APPEAL",
       relatedEntityId: appealId,
     });
 
     this.logger.log({
-      message: 'Appeal rejected',
+      message: "Appeal rejected",
       appealId,
       reviewedBy: adminId,
       note,
     });
 
-    return { message: 'Appeal rejected', appealId };
+    return { message: "Appeal rejected", appealId };
   }
 
   // ─── Admin: All penalty records ─────────────────────────────────────
@@ -666,7 +666,7 @@ export class PenaltiesService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           provider: {
             select: { id: true, fullName: true, email: true, phone: true },

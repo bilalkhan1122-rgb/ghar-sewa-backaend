@@ -4,7 +4,7 @@ import {
   IsUUID,
   MaxLength,
   MinLength,
-} from 'class-validator';
+} from "class-validator";
 
 export class CreateAppealDto {
   @IsUUID()
@@ -12,8 +12,8 @@ export class CreateAppealDto {
   penaltyId!: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Explanation is required' })
-  @MinLength(10, { message: 'Explanation must be at least 10 characters' })
+  @IsNotEmpty({ message: "Explanation is required" })
+  @MinLength(10, { message: "Explanation must be at least 10 characters" })
   @MaxLength(2000)
   explanation!: string;
 }

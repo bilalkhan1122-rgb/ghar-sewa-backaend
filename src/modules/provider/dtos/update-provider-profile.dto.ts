@@ -10,14 +10,14 @@ import {
   IsUUID,
   ArrayMinSize,
   ArrayMaxSize,
-} from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class UpdateProviderProfileDto {
   @ApiPropertyOptional({
-    description: 'Provider bio / description',
-    example: 'Professional plumber with 10 years of experience',
+    description: "Provider bio / description",
+    example: "Professional plumber with 10 years of experience",
     minLength: 20,
     maxLength: 1000,
   })
@@ -28,7 +28,7 @@ export class UpdateProviderProfileDto {
   bio?: string;
 
   @ApiPropertyOptional({
-    description: 'Hourly rate in PKR',
+    description: "Hourly rate in PKR",
     example: 500,
     minimum: 50,
     maximum: 50000,
@@ -41,8 +41,8 @@ export class UpdateProviderProfileDto {
   hourlyRate?: number;
 
   @ApiPropertyOptional({
-    description: 'Service location / area',
-    example: 'Gulberg, Lahore',
+    description: "Service location / area",
+    example: "Gulberg, Lahore",
     minLength: 3,
     maxLength: 500,
   })
@@ -53,7 +53,7 @@ export class UpdateProviderProfileDto {
   serviceLocation?: string;
 
   @ApiPropertyOptional({
-    description: 'Service radius in kilometers',
+    description: "Service radius in kilometers",
     example: 10,
     minimum: 1,
     maximum: 100,
@@ -66,13 +66,13 @@ export class UpdateProviderProfileDto {
   serviceRadius?: number;
 
   @ApiPropertyOptional({
-    description: 'Array of service category IDs',
-    example: ['category-id-1', 'category-id-2'],
+    description: "Array of service category IDs",
+    example: ["category-id-1", "category-id-2"],
     type: [String],
   })
   @IsOptional()
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsUUID("4", { each: true })
   @ArrayMinSize(1)
   @ArrayMaxSize(10)
   categoryIds?: string[];

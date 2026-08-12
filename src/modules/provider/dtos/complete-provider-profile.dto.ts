@@ -10,14 +10,14 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsUUID,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 
 export class CompleteProviderProfileDto {
   @ApiProperty({
-    description: 'Provider bio / description',
-    example: 'Professional plumber with 10 years of experience',
+    description: "Provider bio / description",
+    example: "Professional plumber with 10 years of experience",
     minLength: 20,
     maxLength: 1000,
   })
@@ -27,7 +27,7 @@ export class CompleteProviderProfileDto {
   bio: string;
 
   @ApiProperty({
-    description: 'Hourly rate in PKR',
+    description: "Hourly rate in PKR",
     example: 500,
     minimum: 50,
     maximum: 50000,
@@ -39,8 +39,8 @@ export class CompleteProviderProfileDto {
   hourlyRate: number;
 
   @ApiProperty({
-    description: 'Service location / area',
-    example: 'Gulberg, Lahore',
+    description: "Service location / area",
+    example: "Gulberg, Lahore",
     minLength: 3,
     maxLength: 500,
   })
@@ -50,7 +50,7 @@ export class CompleteProviderProfileDto {
   serviceLocation: string;
 
   @ApiPropertyOptional({
-    description: 'Service radius in kilometers',
+    description: "Service radius in kilometers",
     example: 10,
     minimum: 1,
     maximum: 100,
@@ -63,8 +63,8 @@ export class CompleteProviderProfileDto {
   serviceRadius?: number;
 
   @ApiProperty({
-    description: 'CNIC number (without dashes)',
-    example: '1234567890123',
+    description: "CNIC number (without dashes)",
+    example: "1234567890123",
     minLength: 13,
     maxLength: 15,
   })
@@ -74,12 +74,12 @@ export class CompleteProviderProfileDto {
   cnicNumber: string;
 
   @ApiProperty({
-    description: 'Array of service category IDs',
-    example: ['category-id-1', 'category-id-2'],
+    description: "Array of service category IDs",
+    example: ["category-id-1", "category-id-2"],
     type: [String],
   })
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsUUID("4", { each: true })
   @ArrayMinSize(1)
   @ArrayMaxSize(10)
   categoryIds: string[];

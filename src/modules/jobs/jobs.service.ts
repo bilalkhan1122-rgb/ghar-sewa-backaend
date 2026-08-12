@@ -3,14 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { AdminAuditService } from 'src/common/services/admin-audit.service';
-import { CreateJobDto } from './dtos/create-job.dto';
-import { UpdateJobDto } from './dtos/update-job.dto';
-import { JobQueryDto, JobSortField } from './dtos/job-query.dto';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { CreateJobDto } from "./dtos/create-job.dto";
+import { UpdateJobDto } from "./dtos/update-job.dto";
+import { JobQueryDto, JobSortField } from "./dtos/job-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   JobStatus,
@@ -20,11 +20,15 @@ import {
   VerificationStatus,
   NotificationType,
   CancellationType,
-} from 'generated/prisma/client';
-import { NotificationsService } from '../notifications/notifications.service';
-import { PenaltiesService } from '../penalties/penalties.service';
+} from "generated/prisma/client";
+import { NotificationsService } from "../notifications/notifications.service";
+import { PenaltiesService } from "../penalties/penalties.service";
+import { RealtimeService } from "../realtime/realtime.service";
 
+// Module 20: urgent jobs expire in 6 hours, normal jobs in 24. The expiry
+// is always computed server-side — the client can never submit one.
 const JOB_EXPIRY_HOURS = 24;
+const URGENT_JOB_EXPIRY_HOURS = 6;
 const MAX_JOB_IMAGES = 5;
 
 @Injectable()
@@ -36,14 +40,14 @@ export class JobsService {
     private readonly notifications: NotificationsService,
     private readonly penalties: PenaltiesService,
     private readonly adminAudit: AdminAuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ─── Helpers ─────────────────────────────────────────────────────────
 
-  private calculateExpiry(): Date {
-    const expiry = new Date();
-    expiry.setHours(expiry.getHours() + JOB_EXPIRY_HOURS);
-    return expiry;
+  private calculateExpiry(isUrgent = false): Date {
+    const hours = isUrgent ? URGENT_JOB_EXPIRY_HOURS : JOB_EXPIRY_HOURS;
+    return new Date(Date.now() + hours * 60 * 60 * 1000);
   }
 
   private buildWhereForCustomer(
@@ -59,6 +63,9 @@ export class JobsService {
     }
     if (query.categoryId) {
       where.categoryId = query.categoryId;
+    }
+    if (query.isUrgent !== undefined) {
+      where.isUrgent = query.isUrgent;
     }
     if (query.minPrice !== undefined || query.maxPrice !== undefined) {
       where.offeredPrice = {};
@@ -81,7 +88,7 @@ export class JobsService {
       where: { id: dto.categoryId },
     });
     if (!category || !category.isActive) {
-      throw new BadRequestException('Invalid or inactive category');
+      throw new BadRequestException("Invalid or inactive category");
     }
 
     const job = await this.prisma.job.create({
@@ -95,7 +102,10 @@ export class JobsService {
         longitude: dto.longitude,
         offeredPrice: dto.offeredPrice,
         status: JobStatus.PENDING,
-        expiresAt: this.calculateExpiry(),
+        // Module 20: urgent jobs get a 6h window instead of 24h — the expiry
+        // timestamp is derived from the flag, never taken from the client.
+        isUrgent: dto.isUrgent ?? false,
+        expiresAt: this.calculateExpiry(dto.isUrgent),
         preferredSchedule: dto.preferredSchedule
           ? new Date(dto.preferredSchedule)
           : null,
@@ -108,7 +118,7 @@ export class JobsService {
     });
 
     this.logger.log({
-      message: 'Job created',
+      message: "Job created",
       jobId: job.id,
       customerId: userId,
       categoryId: dto.categoryId,
@@ -119,7 +129,7 @@ export class JobsService {
       const error = err as { message?: string };
       this.logger.error(
         { err: error, jobId: job.id },
-        'Failed to notify providers',
+        "Failed to notify providers",
       );
     });
 
@@ -134,21 +144,23 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (job.customerId !== userId) {
-      throw new ForbiddenException('You can only update your own jobs');
+      throw new ForbiddenException("You can only update your own jobs");
     }
 
     if (job.status !== JobStatus.PENDING) {
       throw new BadRequestException(
-        'Jobs can only be edited while in PENDING status',
+        "Jobs can only be edited while in PENDING status",
       );
     }
 
-    // Recalculate expiry
-    const expiresAt = this.calculateExpiry();
+    // Module 20: urgency is fixed at creation (not updatable), so the fresh
+    // expiry window always matches the job's original urgency. The client can
+    // never extend a job's lifecycle by toggling urgency.
+    const expiresAt = this.calculateExpiry(job.isUrgent);
 
     // Validate category if changing
     if (dto.categoryId) {
@@ -156,7 +168,7 @@ export class JobsService {
         where: { id: dto.categoryId },
       });
       if (!category || !category.isActive) {
-        throw new BadRequestException('Invalid or inactive category');
+        throw new BadRequestException("Invalid or inactive category");
       }
     }
 
@@ -198,16 +210,16 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (job.customerId !== userId) {
-      throw new ForbiddenException('You can only delete your own jobs');
+      throw new ForbiddenException("You can only delete your own jobs");
     }
 
     if (job.status !== JobStatus.PENDING) {
       throw new BadRequestException(
-        'Jobs can only be deleted while in PENDING status',
+        "Jobs can only be deleted while in PENDING status",
       );
     }
 
@@ -221,12 +233,12 @@ export class JobsService {
     });
 
     this.logger.log({
-      message: 'Job deleted',
+      message: "Job deleted",
       jobId,
       customerId: userId,
     });
 
-    return { message: 'Job deleted successfully' };
+    return { message: "Job deleted successfully" };
   }
 
   // ─── Customer: Cancel Job ────────────────────────────────────────────
@@ -237,15 +249,15 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (job.customerId !== userId) {
-      throw new ForbiddenException('You can only cancel your own jobs');
+      throw new ForbiddenException("You can only cancel your own jobs");
     }
 
     if (job.status !== JobStatus.PENDING) {
-      throw new BadRequestException('Only pending jobs can be cancelled');
+      throw new BadRequestException("Only pending jobs can be cancelled");
     }
 
     const updated = await this.prisma.job.update({
@@ -258,9 +270,9 @@ export class JobsService {
     void this.notifications.send({
       userId,
       type: NotificationType.JOB_CANCELLED,
-      title: 'Job cancelled',
+      title: "Job cancelled",
       message: `Your job "${job.title}" has been cancelled.`,
-      relatedEntityType: 'JOB',
+      relatedEntityType: "JOB",
       relatedEntityId: jobId,
     });
 
@@ -275,28 +287,29 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (job.customerId !== userId) {
-      throw new ForbiddenException('You can only repost your own jobs');
+      throw new ForbiddenException("You can only repost your own jobs");
     }
 
     if (job.status !== JobStatus.EXPIRED) {
-      throw new BadRequestException('Only expired jobs can be reposted');
+      throw new BadRequestException("Only expired jobs can be reposted");
     }
 
     const updated = await this.prisma.job.update({
       where: { id: jobId },
       data: {
         status: JobStatus.PENDING,
-        expiresAt: this.calculateExpiry(),
+        // An urgent job stays urgent when reposted (same 6h window).
+        expiresAt: this.calculateExpiry(job.isUrgent),
       },
       include: { category: true, images: true },
     });
 
     this.logger.log({
-      message: 'Job reposted',
+      message: "Job reposted",
       jobId,
       customerId: userId,
     });
@@ -311,14 +324,14 @@ export class JobsService {
       page = 1,
       limit = 10,
       sortBy = JobSortField.CREATED_AT,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
 
     const skip = (page - 1) * limit;
     const where = this.buildWhereForCustomer(userId, query);
 
     const orderByField =
-      sortBy === JobSortField.OFFERED_PRICE ? 'offeredPrice' : 'createdAt';
+      sortBy === JobSortField.OFFERED_PRICE ? "offeredPrice" : "createdAt";
 
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
@@ -370,7 +383,7 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     // Authorization: only customer (owner), or admin
@@ -380,7 +393,7 @@ export class JobsService {
     });
 
     if (job.customerId !== userId && user?.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('You do not have access to this job');
+      throw new ForbiddenException("You do not have access to this job");
     }
 
     return job;
@@ -410,7 +423,7 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     // Verify provider is approved and profile is complete
@@ -431,7 +444,7 @@ export class JobsService {
       !provider.isActive
     ) {
       throw new ForbiddenException(
-        'Access denied: provider is not fully approved',
+        "Access denied: provider is not fully approved",
       );
     }
 
@@ -441,17 +454,17 @@ export class JobsService {
 
     if (!providerCategoryIds.includes(job.categoryId)) {
       throw new ForbiddenException(
-        'This job is not in your service categories',
+        "This job is not in your service categories",
       );
     }
 
     // Only show jobs that are pending and not expired
     if (job.status !== JobStatus.PENDING) {
-      throw new NotFoundException('Job is no longer available');
+      throw new NotFoundException("Job is no longer available");
     }
 
     if (job.expiresAt <= new Date()) {
-      throw new NotFoundException('Job has expired');
+      throw new NotFoundException("Job has expired");
     }
 
     return job;
@@ -470,7 +483,7 @@ export class JobsService {
       minPrice,
       maxPrice,
       sortBy = JobSortField.CREATED_AT,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
 
     // Validate provider is approved
@@ -486,7 +499,7 @@ export class JobsService {
     });
 
     if (!provider || provider.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     if (
@@ -495,7 +508,7 @@ export class JobsService {
       !provider.isActive
     ) {
       throw new ForbiddenException(
-        'Your profile must be approved and complete to view available jobs',
+        "Your profile must be approved and complete to view available jobs",
       );
     }
 
@@ -538,14 +551,21 @@ export class JobsService {
     };
 
     const orderByField =
-      sortBy === JobSortField.OFFERED_PRICE ? 'offeredPrice' : 'createdAt';
+      sortBy === JobSortField.OFFERED_PRICE ? "offeredPrice" : "createdAt";
+
+    // Module 20: urgent pending jobs always float to the top of the provider
+    // feed, then newest (or price-sorted) within each group.
+    const orderBy: Prisma.JobOrderByWithRelationInput[] = [
+      { isUrgent: "desc" },
+      { [orderByField]: sortOrder },
+    ];
 
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [orderByField]: sortOrder },
+        orderBy,
         include: {
           category: true,
           images: true,
@@ -590,15 +610,15 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (job.customerId !== userId) {
-      throw new ForbiddenException('You can only add images to your own jobs');
+      throw new ForbiddenException("You can only add images to your own jobs");
     }
 
     if (job.status !== JobStatus.PENDING) {
-      throw new BadRequestException('Images can only be added to pending jobs');
+      throw new BadRequestException("Images can only be added to pending jobs");
     }
 
     if (job.images.length >= MAX_JOB_IMAGES) {
@@ -629,12 +649,12 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     if (job.customerId !== userId) {
       throw new ForbiddenException(
-        'You can only delete images from your own jobs',
+        "You can only delete images from your own jobs",
       );
     }
 
@@ -643,7 +663,7 @@ export class JobsService {
     });
 
     if (!image || image.jobId !== jobId) {
-      throw new NotFoundException('Image not found');
+      throw new NotFoundException("Image not found");
     }
 
     await this.fileUpload.deleteFile(image.imageUrl).catch(() => {});
@@ -651,7 +671,7 @@ export class JobsService {
       where: { id: imageId },
     });
 
-    return { message: 'Image deleted successfully' };
+    return { message: "Image deleted successfully" };
   }
 
   async listJobImages(jobId: string) {
@@ -660,12 +680,12 @@ export class JobsService {
     });
 
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
 
     return this.prisma.jobImage.findMany({
       where: { jobId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -691,7 +711,7 @@ export class JobsService {
       dateFrom,
       dateTo,
       sortBy = JobSortField.CREATED_AT,
-      sortOrder = 'desc',
+      sortOrder = "desc",
     } = query;
 
     const skip = (page - 1) * limit;
@@ -699,10 +719,11 @@ export class JobsService {
     const where: Prisma.JobWhereInput = {};
     if (status) where.status = status as JobStatus;
     if (categoryId) where.categoryId = categoryId;
+    if (query.isUrgent !== undefined) where.isUrgent = query.isUrgent;
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
       ];
     }
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -723,7 +744,7 @@ export class JobsService {
     }
 
     const orderByField =
-      sortBy === JobSortField.OFFERED_PRICE ? 'offeredPrice' : 'createdAt';
+      sortBy === JobSortField.OFFERED_PRICE ? "offeredPrice" : "createdAt";
 
     const [jobs, total] = await Promise.all([
       this.prisma.job.findMany({
@@ -785,11 +806,11 @@ export class JobsService {
             customer: { select: { id: true, fullName: true } },
           },
         },
-        timeline: { orderBy: { createdAt: 'asc' } },
+        timeline: { orderBy: { createdAt: "asc" } },
       },
     });
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
     return job;
   }
@@ -800,11 +821,11 @@ export class JobsService {
       select: { id: true, status: true },
     });
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
     const timeline = await this.prisma.jobTimeline.findMany({
       where: { jobId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
     return {
       jobId,
@@ -821,10 +842,10 @@ export class JobsService {
   async adminCancelJob(adminId: string, jobId: string, reason: string) {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
     if (job.status !== JobStatus.PENDING) {
-      throw new BadRequestException('Only pending jobs can be cancelled');
+      throw new BadRequestException("Only pending jobs can be cancelled");
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -843,7 +864,7 @@ export class JobsService {
       await tx.jobTimeline.create({
         data: {
           jobId,
-          event: 'JOB_CANCELLED_BY_ADMIN',
+          event: "JOB_CANCELLED_BY_ADMIN",
           description: reason,
         },
       });
@@ -853,20 +874,20 @@ export class JobsService {
     void this.notifications.send({
       userId: job.customerId,
       type: NotificationType.JOB_CANCELLED,
-      title: 'Job cancelled by admin',
+      title: "Job cancelled by admin",
       message: `Your job "${job.title}" was cancelled. Reason: ${reason}`,
-      relatedEntityType: 'JOB',
+      relatedEntityType: "JOB",
       relatedEntityId: jobId,
     });
     await this.adminAudit.record({
       adminId,
-      action: 'JOB_CANCELLED',
-      entityType: 'JOB',
+      action: "JOB_CANCELLED",
+      entityType: "JOB",
       entityId: jobId,
       newValues: { reason },
     });
     this.logger.log({
-      message: 'Job cancelled by admin',
+      message: "Job cancelled by admin",
       adminId,
       jobId,
       reason,
@@ -882,7 +903,7 @@ export class JobsService {
   async adminForceCloseJob(adminId: string, jobId: string, reason: string) {
     const job = await this.prisma.job.findUnique({ where: { id: jobId } });
     if (!job) {
-      throw new NotFoundException('Job not found');
+      throw new NotFoundException("Job not found");
     }
     if (
       job.status === JobStatus.CANCELLED ||
@@ -910,7 +931,7 @@ export class JobsService {
       await tx.jobTimeline.create({
         data: {
           jobId,
-          event: 'JOB_FORCE_CLOSED',
+          event: "JOB_FORCE_CLOSED",
           description: reason,
         },
       });
@@ -927,20 +948,20 @@ export class JobsService {
     void this.notifications.send({
       userId: job.customerId,
       type: NotificationType.JOB_CANCELLED,
-      title: 'Job force-closed by admin',
+      title: "Job force-closed by admin",
       message: `Your job "${job.title}" was closed by the platform. Reason: ${reason}`,
-      relatedEntityType: 'JOB',
+      relatedEntityType: "JOB",
       relatedEntityId: jobId,
     });
     await this.adminAudit.record({
       adminId,
-      action: 'JOB_FORCE_CLOSED',
-      entityType: 'JOB',
+      action: "JOB_FORCE_CLOSED",
+      entityType: "JOB",
       entityId: jobId,
       newValues: { reason },
     });
     this.logger.log({
-      message: 'Job force-closed by admin',
+      message: "Job force-closed by admin",
       adminId,
       jobId,
       reason,
@@ -967,22 +988,37 @@ export class JobsService {
           status: JobStatus.EXPIRED,
           expiresAt: { lte: new Date() },
         },
-        select: { id: true, title: true, customerId: true },
+        select: { id: true, title: true, customerId: true, isUrgent: true },
       });
 
       await this.notifications.sendToMany(
         expiredJobs.map((j) => ({
           userId: j.customerId,
           type: NotificationType.JOB_EXPIRED,
-          title: 'Job expired',
+          title: "Job expired",
           message: `Your job "${j.title}" expired without a provider. You can repost it.`,
-          relatedEntityType: 'JOB',
+          relatedEntityType: "JOB",
           relatedEntityId: j.id,
         })),
       );
 
+      // Module 20 realtime: let the customer know their urgent job is gone
+      // from the provider feeds (published after the status change commits).
+      await Promise.all(
+        expiredJobs
+          .filter((j) => j.isUrgent)
+          .map((j) =>
+            this.realtime.publishUrgentJobExpired(j.customerId, {
+              jobId: j.id,
+              title: j.title,
+              isUrgent: true,
+              expiredAt: new Date(),
+            }),
+          ),
+      );
+
       this.logger.log({
-        message: 'Expired overdue jobs',
+        message: "Expired overdue jobs",
         count: result.count,
       });
     }
@@ -996,6 +1032,9 @@ export class JobsService {
     id: string;
     categoryId: string;
     title: string;
+    offeredPrice: Prisma.Decimal;
+    isUrgent: boolean;
+    expiresAt: Date;
   }) {
     // Find all approved providers in this category
     const matchingProviders =
@@ -1019,22 +1058,50 @@ export class JobsService {
         },
       });
 
-    // Notify all matching providers about the new job
+    // Notify all matching providers about the new job. Module 20: urgent
+    // jobs use a dedicated notification type so clients can surface them
+    // with high priority.
     await this.notifications.sendToMany(
       matchingProviders.map((match) => ({
         userId: match.provider.userId,
-        type: NotificationType.NEW_JOB,
-        title: 'New job in your area! 🔨',
-        message: `"${job.title}" — a new job matching your services is available.`,
-        relatedEntityType: 'JOB',
+        type: job.isUrgent
+          ? NotificationType.URGENT_JOB_POSTED
+          : NotificationType.NEW_JOB,
+        title: job.isUrgent
+          ? "🚨 URGENT job in your area!"
+          : "New job in your area! 🔨",
+        message: job.isUrgent
+          ? `URGENT: "${job.title}" — acts fast, it expires in 6 hours.`
+          : `"${job.title}" — a new job matching your services is available.`,
+        relatedEntityType: "JOB",
         relatedEntityId: job.id,
       })),
     );
+
+    // Module 20 realtime: urgent jobs are pushed to each matching provider's
+    // private channel (only eligible providers ever receive the event).
+    // Published AFTER the notification rows exist — never before.
+    // RealtimeService.publish never rejects; failures are logged + swallowed.
+    if (job.isUrgent) {
+      await Promise.all(
+        matchingProviders.map((match) =>
+          this.realtime.publishUrgentJobCreated(match.provider.userId, {
+            jobId: job.id,
+            title: job.title,
+            categoryId: job.categoryId,
+            offeredPrice: job.offeredPrice.toNumber(),
+            isUrgent: true,
+            expiresAt: job.expiresAt,
+          }),
+        ),
+      );
+    }
 
     this.logger.log({
       message: `Notified ${matchingProviders.length} providers about new job`,
       jobId: job.id,
       categoryId: job.categoryId,
+      isUrgent: job.isUrgent,
     });
   }
 

@@ -4,11 +4,11 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-} from 'class-validator';
-import { DisputeStatus } from 'generated/prisma/client';
+} from "class-validator";
+import { DisputeStatus } from "generated/prisma/client";
 
 export class UpdateDisputeStatusDto {
-  @IsEnum(DisputeStatus, { message: 'Invalid dispute status' })
+  @IsEnum(DisputeStatus, { message: "Invalid dispute status" })
   @IsNotEmpty()
   status!: DisputeStatus;
 

@@ -4,17 +4,17 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { VerificationQueryDto } from './dtos/verification-query.dto';
-import { Logger } from 'nestjs-pino';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { VerificationQueryDto } from "./dtos/verification-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   UserRole,
   VerificationStatus,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /**
  * Module 11 — Provider Verification.
@@ -42,19 +42,19 @@ export class VerificationService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     if (user.verificationStatus === VerificationStatus.BANNED) {
       throw new ForbiddenException(
-        'Your account is banned. You cannot submit a verification request.',
+        "Your account is banned. You cannot submit a verification request.",
       );
     }
 
     const profile = user.providerProfile;
     if (!profile) {
       throw new BadRequestException(
-        'Complete your profile before submitting for verification',
+        "Complete your profile before submitting for verification",
       );
     }
 
@@ -64,7 +64,7 @@ export class VerificationService {
     });
     if (pendingRequest) {
       throw new ConflictException(
-        'You already have a verification request under review',
+        "You already have a verification request under review",
       );
     }
 
@@ -73,7 +73,7 @@ export class VerificationService {
     if (missing.length > 0) {
       throw new BadRequestException({
         message:
-          'Profile must be 100% complete before submitting for verification',
+          "Profile must be 100% complete before submitting for verification",
         missingFields: missing,
       });
     }
@@ -100,7 +100,7 @@ export class VerificationService {
 
     // Placeholder admin event — a real admin queue/email system can hook here.
     this.logger.log({
-      eventType: 'ADMIN_VERIFICATION_SUBMITTED',
+      eventType: "ADMIN_VERIFICATION_SUBMITTED",
       requestId: request.id,
       providerId: userId,
       isResubmission,
@@ -112,18 +112,18 @@ export class VerificationService {
         ? NotificationType.VERIFICATION_RESUBMITTED
         : NotificationType.VERIFICATION_SUBMITTED,
       title: isResubmission
-        ? 'Verification resubmitted 📋'
-        : 'Verification submitted 📋',
+        ? "Verification resubmitted 📋"
+        : "Verification submitted 📋",
       message:
-        'Your profile has been submitted for review. We will notify you once it is decided.',
-      relatedEntityType: 'VERIFICATION_REQUEST',
+        "Your profile has been submitted for review. We will notify you once it is decided.",
+      relatedEntityType: "VERIFICATION_REQUEST",
       relatedEntityId: request.id,
     });
 
     return {
       message: isResubmission
-        ? 'Profile resubmitted for verification successfully'
-        : 'Profile submitted for verification successfully',
+        ? "Profile resubmitted for verification successfully"
+        : "Profile submitted for verification successfully",
       verificationStatus: VerificationStatus.PENDING,
       requestId: request.id,
     };
@@ -174,10 +174,10 @@ export class VerificationService {
         const request = await this.prisma.verificationRequest.create({
           data: {
             providerId: userId,
-            cnicNumber: profile?.cnicNumber ?? '',
-            facePhoto: profile?.facePhoto ?? '',
-            cnicFrontImage: profile?.cnicFrontImage ?? '',
-            cnicBackImage: profile?.cnicBackImage ?? '',
+            cnicNumber: profile?.cnicNumber ?? "",
+            facePhoto: profile?.facePhoto ?? "",
+            cnicFrontImage: profile?.cnicFrontImage ?? "",
+            cnicBackImage: profile?.cnicBackImage ?? "",
             status: VerificationStatus.PENDING,
             submittedAt: new Date(),
           },
@@ -188,19 +188,19 @@ export class VerificationService {
       }
 
       this.logger.log({
-        eventType: 'ADMIN_VERIFICATION_PENDING_RESET',
+        eventType: "ADMIN_VERIFICATION_PENDING_RESET",
         providerId: userId,
-        reason: 'verification-sensitive information changed',
+        reason: "verification-sensitive information changed",
       });
 
       if (wasApproved) {
         void this.notifications.send({
           userId,
           type: NotificationType.VERIFICATION_RESUBMITTED,
-          title: 'Re-verification required 🔄',
+          title: "Re-verification required 🔄",
           message:
-            'Your verification documents changed. Your profile is pending re-verification.',
-          relatedEntityType: 'VERIFICATION_REQUEST',
+            "Your verification documents changed. Your profile is pending re-verification.",
+          relatedEntityType: "VERIFICATION_REQUEST",
           relatedEntityId: requestId,
         });
       }
@@ -220,12 +220,12 @@ export class VerificationService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     const latestRequest = await this.prisma.verificationRequest.findFirst({
       where: { providerId: userId },
-      orderBy: { submittedAt: 'desc' },
+      orderBy: { submittedAt: "desc" },
       select: {
         id: true,
         status: true,
@@ -256,7 +256,7 @@ export class VerificationService {
         where,
         skip,
         take: limit,
-        orderBy: { submittedAt: 'desc' },
+        orderBy: { submittedAt: "desc" },
       }),
       this.prisma.verificationRequest.count({ where }),
     ]);
@@ -292,7 +292,7 @@ export class VerificationService {
         where,
         skip,
         take: limit,
-        orderBy: { submittedAt: 'asc' },
+        orderBy: { submittedAt: "asc" },
         include: {
           provider: {
             select: {
@@ -348,7 +348,7 @@ export class VerificationService {
     });
 
     if (!request) {
-      throw new NotFoundException('Verification request not found');
+      throw new NotFoundException("Verification request not found");
     }
 
     return request;
@@ -362,7 +362,7 @@ export class VerificationService {
     });
 
     if (!request) {
-      throw new NotFoundException('Verification request not found');
+      throw new NotFoundException("Verification request not found");
     }
 
     if (request.status !== VerificationStatus.PENDING) {
@@ -388,7 +388,7 @@ export class VerificationService {
     ]);
 
     this.logger.log({
-      eventType: 'ADMIN_VERIFICATION_APPROVED',
+      eventType: "ADMIN_VERIFICATION_APPROVED",
       requestId,
       providerId: request.providerId,
       reviewedBy: adminId,
@@ -398,14 +398,14 @@ export class VerificationService {
     void this.notifications.send({
       userId: request.providerId,
       type: NotificationType.VERIFICATION_APPROVED,
-      title: 'Verification approved ✅',
+      title: "Verification approved ✅",
       message:
-        'Congratulations! Your profile is verified. You can now accept jobs and bookings.',
-      relatedEntityType: 'VERIFICATION_REQUEST',
+        "Congratulations! Your profile is verified. You can now accept jobs and bookings.",
+      relatedEntityType: "VERIFICATION_REQUEST",
       relatedEntityId: requestId,
     });
 
-    return { message: 'Verification request approved', request: updated };
+    return { message: "Verification request approved", request: updated };
   }
 
   async adminReject(adminId: string, requestId: string, reason: string) {
@@ -414,7 +414,7 @@ export class VerificationService {
     });
 
     if (!request) {
-      throw new NotFoundException('Verification request not found');
+      throw new NotFoundException("Verification request not found");
     }
 
     if (request.status !== VerificationStatus.PENDING) {
@@ -440,7 +440,7 @@ export class VerificationService {
     ]);
 
     this.logger.log({
-      eventType: 'ADMIN_VERIFICATION_REJECTED',
+      eventType: "ADMIN_VERIFICATION_REJECTED",
       requestId,
       providerId: request.providerId,
       reviewedBy: adminId,
@@ -450,13 +450,13 @@ export class VerificationService {
     void this.notifications.send({
       userId: request.providerId,
       type: NotificationType.VERIFICATION_REJECTED,
-      title: 'Verification rejected ❌',
+      title: "Verification rejected ❌",
       message: `Your verification request was rejected. Reason: ${reason}`,
-      relatedEntityType: 'VERIFICATION_REQUEST',
+      relatedEntityType: "VERIFICATION_REQUEST",
       relatedEntityId: requestId,
     });
 
-    return { message: 'Verification request rejected', request: updated };
+    return { message: "Verification request rejected", request: updated };
   }
 
   // ─── Admin: History ─────────────────────────────────────────────────
@@ -471,7 +471,7 @@ export class VerificationService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     return this.getHistory(providerId, query);
@@ -486,11 +486,11 @@ export class VerificationService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     if (user.verificationStatus === VerificationStatus.BANNED) {
-      throw new BadRequestException('Provider is already banned');
+      throw new BadRequestException("Provider is already banned");
     }
 
     await this.prisma.user.update({
@@ -499,7 +499,7 @@ export class VerificationService {
     });
 
     this.logger.log({
-      eventType: 'ADMIN_PROVIDER_BANNED',
+      eventType: "ADMIN_PROVIDER_BANNED",
       providerId,
       bannedBy: adminId,
     });
@@ -507,15 +507,15 @@ export class VerificationService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.VERIFICATION_BANNED,
-      title: 'Account banned 🚫',
+      title: "Account banned 🚫",
       message:
-        'Your provider account has been banned. You can no longer accept jobs or bookings.',
-      relatedEntityType: 'USER',
+        "Your provider account has been banned. You can no longer accept jobs or bookings.",
+      relatedEntityType: "USER",
       relatedEntityId: providerId,
     });
 
     return {
-      message: 'Provider banned',
+      message: "Provider banned",
       verificationStatus: VerificationStatus.BANNED,
     };
   }
@@ -527,11 +527,11 @@ export class VerificationService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     if (user.verificationStatus !== VerificationStatus.BANNED) {
-      throw new BadRequestException('Provider is not currently banned');
+      throw new BadRequestException("Provider is not currently banned");
     }
 
     // Unbanned providers must go through verification again
@@ -541,7 +541,7 @@ export class VerificationService {
     });
 
     this.logger.log({
-      eventType: 'ADMIN_PROVIDER_UNBANNED',
+      eventType: "ADMIN_PROVIDER_UNBANNED",
       providerId,
       unbannedBy: adminId,
     });
@@ -549,16 +549,16 @@ export class VerificationService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.VERIFICATION_UNBANNED,
-      title: 'Account unbanned ✅',
+      title: "Account unbanned ✅",
       message:
-        'Your ban has been lifted. Please resubmit your profile for verification to continue.',
-      relatedEntityType: 'USER',
+        "Your ban has been lifted. Please resubmit your profile for verification to continue.",
+      relatedEntityType: "USER",
       relatedEntityId: providerId,
     });
 
     return {
       message:
-        'Provider unbanned. Verification status reset — resubmission required.',
+        "Provider unbanned. Verification status reset — resubmission required.",
       verificationStatus: VerificationStatus.INCOMPLETE,
     };
   }
@@ -576,14 +576,14 @@ export class VerificationService {
     categories?: unknown[];
   }): string[] {
     const fields: { name: string; completed: boolean }[] = [
-      { name: 'facePhoto', completed: !!profile?.facePhoto },
-      { name: 'cnicNumber', completed: !!profile?.cnicNumber },
-      { name: 'cnicFrontImage', completed: !!profile?.cnicFrontImage },
-      { name: 'cnicBackImage', completed: !!profile?.cnicBackImage },
-      { name: 'bio', completed: !!profile?.bio },
-      { name: 'hourlyRate', completed: profile?.hourlyRate != null },
-      { name: 'serviceLocation', completed: !!profile?.serviceLocation },
-      { name: 'categories', completed: (profile?.categories?.length ?? 0) > 0 },
+      { name: "facePhoto", completed: !!profile?.facePhoto },
+      { name: "cnicNumber", completed: !!profile?.cnicNumber },
+      { name: "cnicFrontImage", completed: !!profile?.cnicFrontImage },
+      { name: "cnicBackImage", completed: !!profile?.cnicBackImage },
+      { name: "bio", completed: !!profile?.bio },
+      { name: "hourlyRate", completed: profile?.hourlyRate != null },
+      { name: "serviceLocation", completed: !!profile?.serviceLocation },
+      { name: "categories", completed: (profile?.categories?.length ?? 0) > 0 },
     ];
 
     return fields.filter((f) => !f.completed).map((f) => f.name);

@@ -1,10 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class ActionReasonDto {
-  @ApiProperty({ example: 'Violation of platform policy', maxLength: 500 })
+  @ApiProperty({ example: "Violation of platform policy", maxLength: 500 })
   @IsString()
-  @IsNotEmpty({ message: 'A reason is required' })
+  @IsNotEmpty({ message: "A reason is required" })
   @MaxLength(500)
   reason!: string;
 }

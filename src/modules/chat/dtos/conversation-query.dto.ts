@@ -1,22 +1,22 @@
-import { IsOptional, IsEnum, IsString } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PaginationDto } from 'src/common/dtos/pagination.dto';
+import { IsOptional, IsEnum, IsString } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { PaginationDto } from "src/common/dtos/pagination.dto";
 
 export enum ConversationSortField {
-  LAST_ACTIVITY = 'lastActivity',
-  CREATED_AT = 'createdAt',
+  LAST_ACTIVITY = "lastActivity",
+  CREATED_AT = "createdAt",
 }
 
 export class ConversationQueryDto extends PaginationDto {
   @ApiPropertyOptional({
-    description: 'Filter by job ID',
+    description: "Filter by job ID",
   })
   @IsOptional()
   @IsString()
   jobId?: string;
 
   @ApiPropertyOptional({
-    description: 'Sort field',
+    description: "Sort field",
     enum: ConversationSortField,
     default: ConversationSortField.LAST_ACTIVITY,
   })
@@ -25,11 +25,11 @@ export class ConversationQueryDto extends PaginationDto {
   sortBy?: ConversationSortField = ConversationSortField.LAST_ACTIVITY;
 
   @ApiPropertyOptional({
-    description: 'Sort order',
-    enum: ['asc', 'desc'],
-    default: 'desc',
+    description: "Sort order",
+    enum: ["asc", "desc"],
+    default: "desc",
   })
   @IsOptional()
   @IsString()
-  sortOrder?: 'asc' | 'desc' = 'desc';
+  sortOrder?: "asc" | "desc" = "desc";
 }

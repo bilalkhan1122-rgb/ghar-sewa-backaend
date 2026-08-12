@@ -1,7 +1,7 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { AdminSearchQueryDto } from './dtos/admin-search-query.dto';
-import { buildDateRange } from './dtos/date-range.dto';
+import { Injectable, BadRequestException } from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { AdminSearchQueryDto } from "./dtos/admin-search-query.dto";
+import { buildDateRange } from "./dtos/date-range.dto";
 import {
   Prisma,
   UserRole,
@@ -13,7 +13,7 @@ import {
   WalletTransactionType,
   WithdrawalStatus,
   TopUpStatus,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 const OPEN_DISPUTE_STATUSES: DisputeStatus[] = [
   DisputeStatus.OPEN,
@@ -56,12 +56,12 @@ export class AdminService {
       this.prisma.user.count({ where: { role: UserRole.CUSTOMER } }),
       this.prisma.user.count({ where: { role: UserRole.PROVIDER } }),
       this.prisma.user.groupBy({
-        by: ['verificationStatus'],
+        by: ["verificationStatus"],
         where: { role: UserRole.PROVIDER },
         _count: { _all: true },
       }),
       this.prisma.job.groupBy({
-        by: ['status'],
+        by: ["status"],
         where: dateFilter ? { createdAt: dateFilter } : undefined,
         _count: { _all: true },
       }),
@@ -99,9 +99,9 @@ export class AdminService {
 
     const verification = this.groupsToRecord(
       verificationGroups,
-      'verificationStatus',
+      "verificationStatus",
     );
-    const jobs = this.groupsToRecord(jobGroups, 'status');
+    const jobs = this.groupsToRecord(jobGroups, "status");
 
     const platformCommission = (
       commissionAgg._sum.amount ?? new Prisma.Decimal(0)
@@ -231,12 +231,12 @@ export class AdminService {
           where: dateFilter ? { createdAt: dateFilter } : undefined,
         }),
         this.prisma.user.groupBy({
-          by: ['role'],
+          by: ["role"],
           where: dateFilter ? { createdAt: dateFilter } : undefined,
           _count: { _all: true },
         }),
         this.prisma.user.groupBy({
-          by: ['status', 'isActive'],
+          by: ["status", "isActive"],
           where: dateFilter ? { createdAt: dateFilter } : undefined,
           _count: { _all: true },
         }),
@@ -289,7 +289,7 @@ export class AdminService {
       await Promise.all([
         this.prisma.user.count({ where }),
         this.prisma.user.groupBy({
-          by: ['verificationStatus'],
+          by: ["verificationStatus"],
           where,
           _count: { _all: true },
         }),
@@ -298,7 +298,7 @@ export class AdminService {
           _count: { _all: true },
         }),
         this.prisma.ratingSummary.findMany({
-          orderBy: [{ averageRating: 'desc' }, { totalReviews: 'desc' }],
+          orderBy: [{ averageRating: "desc" }, { totalReviews: "desc" }],
           take: 10,
           include: {
             user: {
@@ -340,12 +340,12 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.job.count({ where }),
       this.prisma.job.groupBy({
-        by: ['status'],
+        by: ["status"],
         where,
         _count: { _all: true },
       }),
       this.prisma.job.groupBy({
-        by: ['categoryId'],
+        by: ["categoryId"],
         where,
         _count: { _all: true },
       }),
@@ -439,19 +439,19 @@ export class AdminService {
     const [total, statusGroups, resolutionGroups] = await Promise.all([
       this.prisma.dispute.count({ where }),
       this.prisma.dispute.groupBy({
-        by: ['status'],
+        by: ["status"],
         where,
         _count: { _all: true },
       }),
       this.prisma.dispute.groupBy({
-        by: ['resolution'],
+        by: ["resolution"],
         where: { ...where, resolution: { not: null } },
         _count: { _all: true },
       }),
     ]);
 
-    const byStatus = this.groupsToRecord(statusGroups, 'status');
-    const byResolution = this.groupsToRecord(resolutionGroups, 'resolution');
+    const byStatus = this.groupsToRecord(statusGroups, "status");
+    const byResolution = this.groupsToRecord(resolutionGroups, "resolution");
 
     return {
       totalDisputes: total,
@@ -471,10 +471,10 @@ export class AdminService {
   async globalSearch(dto: AdminSearchQueryDto) {
     const q = dto.q?.trim();
     if (!q) {
-      throw new BadRequestException('Search query is required');
+      throw new BadRequestException("Search query is required");
     }
     const limit = dto.limit ?? 10;
-    const contains: Prisma.StringFilter = { contains: q, mode: 'insensitive' };
+    const contains: Prisma.StringFilter = { contains: q, mode: "insensitive" };
 
     const [users, jobs, bookings, disputes, withdrawals, transactions] =
       await Promise.all([
@@ -564,7 +564,7 @@ export class AdminService {
     const result: Record<string, number> = {};
     for (const group of groups) {
       const value = (group as unknown as Record<string, unknown>)[key];
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         result[value] = group._count._all;
       }
     }

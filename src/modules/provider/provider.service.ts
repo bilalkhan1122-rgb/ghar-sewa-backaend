@@ -4,19 +4,20 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
-} from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { FileUploadService } from 'src/common/services/file-upload.service';
-import { CompleteProviderProfileDto } from './dtos/complete-provider-profile.dto';
-import { UpdateProviderProfileDto } from './dtos/update-provider-profile.dto';
+} from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
+import { CompleteProviderProfileDto } from "./dtos/complete-provider-profile.dto";
+import { UpdateProviderProfileDto } from "./dtos/update-provider-profile.dto";
 import {
   Prisma,
+  ProviderRank,
   UserRole,
   UserStatus,
   VerificationStatus,
   BookingStatus,
-} from 'generated/prisma/client';
-import { VerificationService } from '../verification/verification.service';
+} from "generated/prisma/client";
+import { VerificationService } from "../verification/verification.service";
 
 @Injectable()
 export class ProviderService {
@@ -31,7 +32,7 @@ export class ProviderService {
   }): void {
     if (user.verificationStatus === VerificationStatus.BANNED) {
       throw new ForbiddenException(
-        'Your account has been banned. You cannot access provider functionality.',
+        "Your account has been banned. You cannot access provider functionality.",
       );
     }
   }
@@ -44,7 +45,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -54,7 +55,7 @@ export class ProviderService {
       where: { cnicNumber: dto.cnicNumber },
     });
     if (existingCnic && existingCnic.userId !== userId) {
-      throw new ConflictException('CNIC number already in use');
+      throw new ConflictException("CNIC number already in use");
     }
 
     // Check if provider already has a profile
@@ -148,11 +149,12 @@ export class ProviderService {
           },
         },
         city: true,
+        providerRanking: true,
       },
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -171,6 +173,11 @@ export class ProviderService {
       verificationStatus: user.verificationStatus,
       profileCompleted: user.profileCompleted,
       createdAt: user.createdAt,
+      // Module 19: provider rank (snapshot values, never internal history)
+      rank: user.providerRanking?.currentRank ?? ProviderRank.NONE,
+      rankAchievedAt: user.providerRanking?.rankAchievedAt ?? null,
+      rankCompletedJobs: user.providerRanking?.completedJobs ?? 0,
+      rankAverageRating: user.providerRanking?.averageRating ?? 0,
       // Provider-specific fields
       profile: profile
         ? {
@@ -201,14 +208,14 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
 
     if (!user.providerProfile) {
       throw new BadRequestException(
-        'Complete your profile first using the profile completion endpoint',
+        "Complete your profile first using the profile completion endpoint",
       );
     }
 
@@ -255,7 +262,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -280,7 +287,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -293,7 +300,7 @@ export class ProviderService {
     }
 
     const oldPhoto = providerProfile.facePhoto;
-    const fileUrl = await this.fileUpload.replaceFile(oldPhoto, file, 'faces');
+    const fileUrl = await this.fileUpload.replaceFile(oldPhoto, file, "faces");
 
     await this.prisma.providerProfile.update({
       where: { userId },
@@ -314,17 +321,17 @@ export class ProviderService {
   // ─── Upload CNIC Images ──────────────────────────────────────────────
 
   async uploadCnicFront(userId: string, file: Express.Multer.File) {
-    return this.uploadCnicImage(userId, file, 'cnicFrontImage');
+    return this.uploadCnicImage(userId, file, "cnicFrontImage");
   }
 
   async uploadCnicBack(userId: string, file: Express.Multer.File) {
-    return this.uploadCnicImage(userId, file, 'cnicBackImage');
+    return this.uploadCnicImage(userId, file, "cnicBackImage");
   }
 
   private async uploadCnicImage(
     userId: string,
     file: Express.Multer.File,
-    field: 'cnicFrontImage' | 'cnicBackImage',
+    field: "cnicFrontImage" | "cnicBackImage",
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -332,7 +339,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -345,7 +352,7 @@ export class ProviderService {
     }
 
     const oldImage = providerProfile[field];
-    const fileUrl = await this.fileUpload.replaceFile(oldImage, file, 'cnic');
+    const fileUrl = await this.fileUpload.replaceFile(oldImage, file, "cnic");
 
     await this.prisma.providerProfile.update({
       where: { userId },
@@ -381,7 +388,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -422,7 +429,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -432,12 +439,12 @@ export class ProviderService {
     });
 
     if (!image) {
-      throw new NotFoundException('Gallery image not found');
+      throw new NotFoundException("Gallery image not found");
     }
 
     if (image.providerId !== userId) {
       throw new ForbiddenException(
-        'You can only remove your own gallery images',
+        "You can only remove your own gallery images",
       );
     }
 
@@ -449,7 +456,7 @@ export class ProviderService {
       where: { id: imageId },
     });
 
-    return { message: 'Gallery image removed successfully' };
+    return { message: "Gallery image removed successfully" };
   }
 
   async listGalleryImages(userId: string) {
@@ -458,14 +465,14 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
 
     return this.prisma.galleryImage.findMany({
       where: { providerId: userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -487,6 +494,7 @@ export class ProviderService {
         },
         city: true,
         ratingSummary: true,
+        providerRanking: true,
       },
     });
 
@@ -497,12 +505,12 @@ export class ProviderService {
       user.verificationStatus !== VerificationStatus.APPROVED ||
       !user.isActive
     ) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     const profile = user.providerProfile;
     if (!profile) {
-      throw new NotFoundException('Provider profile not found');
+      throw new NotFoundException("Provider profile not found");
     }
 
     // Get completed jobs count and average rating
@@ -531,6 +539,8 @@ export class ProviderService {
         oneStar: user.ratingSummary?.oneStarCount ?? 0,
       },
       totalCompletedJobs: bookingStats.completedJobs,
+      // Module 19: rank badge shown to customers browsing providers
+      rank: user.providerRanking?.currentRank ?? ProviderRank.NONE,
     };
   }
 
@@ -548,6 +558,7 @@ export class ProviderService {
           },
         },
         ratingSummary: true,
+        providerRanking: true,
         wallet: {
           select: {
             balance: true,
@@ -559,7 +570,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -594,6 +605,8 @@ export class ProviderService {
       heldBalance: user.wallet?.heldBalance ?? new Prisma.Decimal(0),
       totalEarnings: user.wallet?.lifetimeCredits ?? user.totalSpent,
       categories: profile?.categories.map((pc) => pc.category) || [],
+      // Module 19: provider rank
+      rank: user.providerRanking?.currentRank ?? ProviderRank.NONE,
     };
   }
 
@@ -605,7 +618,7 @@ export class ProviderService {
     });
 
     if (!user || user.role !== UserRole.PROVIDER) {
-      throw new NotFoundException('Provider not found');
+      throw new NotFoundException("Provider not found");
     }
 
     this.checkNotBanned(user);
@@ -613,7 +626,7 @@ export class ProviderService {
     const fileUrl = await this.fileUpload.replaceFile(
       user.profilePhoto,
       file,
-      'profiles',
+      "profiles",
     );
 
     await this.prisma.user.update({
@@ -639,14 +652,14 @@ export class ProviderService {
     } | null,
   ) {
     const fields: { name: string; completed: boolean }[] = [
-      { name: 'facePhoto', completed: !!profile?.facePhoto },
-      { name: 'cnicNumber', completed: !!profile?.cnicNumber },
-      { name: 'cnicFrontImage', completed: !!profile?.cnicFrontImage },
-      { name: 'cnicBackImage', completed: !!profile?.cnicBackImage },
-      { name: 'bio', completed: !!profile?.bio },
-      { name: 'hourlyRate', completed: profile?.hourlyRate != null },
-      { name: 'serviceLocation', completed: !!profile?.serviceLocation },
-      { name: 'categories', completed: (profile?.categories?.length ?? 0) > 0 },
+      { name: "facePhoto", completed: !!profile?.facePhoto },
+      { name: "cnicNumber", completed: !!profile?.cnicNumber },
+      { name: "cnicFrontImage", completed: !!profile?.cnicFrontImage },
+      { name: "cnicBackImage", completed: !!profile?.cnicBackImage },
+      { name: "bio", completed: !!profile?.bio },
+      { name: "hourlyRate", completed: profile?.hourlyRate != null },
+      { name: "serviceLocation", completed: !!profile?.serviceLocation },
+      { name: "categories", completed: (profile?.categories?.length ?? 0) > 0 },
     ];
 
     const completedFields = fields
@@ -667,14 +680,14 @@ export class ProviderService {
 
   private getAllRequiredFields(): string[] {
     return [
-      'facePhoto',
-      'cnicNumber',
-      'cnicFrontImage',
-      'cnicBackImage',
-      'bio',
-      'hourlyRate',
-      'serviceLocation',
-      'categories',
+      "facePhoto",
+      "cnicNumber",
+      "cnicFrontImage",
+      "cnicBackImage",
+      "bio",
+      "hourlyRate",
+      "serviceLocation",
+      "categories",
     ];
   }
 

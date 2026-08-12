@@ -11,21 +11,21 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   ParseUUIDPipe,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { WalletService } from './wallet.service';
-import { TopUpsService } from './topups.service';
-import { GetUser } from 'src/common/decorators/get-user.decorator';
-import { Roles } from 'src/common/decorators/roles.decorator';
-import { UserRole } from 'generated/prisma/client';
-import { CreateTopUpDto } from './dtos/create-topup.dto';
-import { TopUpQueryDto } from './dtos/topup-query.dto';
-import { WalletTransactionQueryDto } from './dtos/wallet-transaction-query.dto';
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from "@nestjs/swagger";
+import { WalletService } from "./wallet.service";
+import { TopUpsService } from "./topups.service";
+import { GetUser } from "src/common/decorators/get-user.decorator";
+import { Roles } from "src/common/decorators/roles.decorator";
+import { UserRole } from "generated/prisma/client";
+import { CreateTopUpDto } from "./dtos/create-topup.dto";
+import { TopUpQueryDto } from "./dtos/topup-query.dto";
+import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
 
-@ApiTags('Wallet (Customer)')
-@Controller('wallet')
+@ApiTags("Wallet (Customer)")
+@Controller("wallet")
 @Roles(UserRole.CUSTOMER)
 export class CustomerWalletController {
   constructor(
@@ -33,9 +33,9 @@ export class CustomerWalletController {
     private readonly topUpsService: TopUpsService,
   ) {}
 
-  @Get('/')
-  @ApiOperation({ summary: 'View my wallet balance' })
-  async getBalance(@GetUser('sub') userId: string) {
+  @Get("/")
+  @ApiOperation({ summary: "View my wallet balance" })
+  async getBalance(@GetUser("sub") userId: string) {
     const wallet = await this.walletService.ensureWallet(userId);
     return {
       walletId: wallet.id,
@@ -46,55 +46,55 @@ export class CustomerWalletController {
     };
   }
 
-  @Get('/summary')
-  @ApiOperation({ summary: 'View my wallet summary' })
-  async getSummary(@GetUser('sub') userId: string) {
+  @Get("/summary")
+  @ApiOperation({ summary: "View my wallet summary" })
+  async getSummary(@GetUser("sub") userId: string) {
     return this.walletService.getWalletSummary(userId);
   }
 
-  @Get('/transactions')
+  @Get("/transactions")
   @ApiOperation({
-    summary: 'View my transaction history (filter by type/status/date)',
+    summary: "View my transaction history (filter by type/status/date)",
   })
   async listTransactions(
-    @GetUser('sub') userId: string,
+    @GetUser("sub") userId: string,
     @Query() query: WalletTransactionQueryDto,
   ) {
     return this.walletService.listTransactions(userId, query);
   }
 
-  @Get('/transactions/:id')
-  @ApiOperation({ summary: 'View a single transaction' })
+  @Get("/transactions/:id")
+  @ApiOperation({ summary: "View a single transaction" })
   async getTransaction(
-    @GetUser('sub') userId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser("sub") userId: string,
+    @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.walletService.getTransaction(userId, id);
   }
 
-  @Post('/topups')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  @ApiConsumes('multipart/form-data')
+  @Post("/topups")
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
+  @ApiConsumes("multipart/form-data")
   @ApiBody({
     schema: {
-      type: 'object',
+      type: "object",
       properties: {
-        amount: { type: 'number' },
+        amount: { type: "number" },
         paymentMethod: {
-          type: 'string',
-          enum: ['JAZZCASH', 'EASYPAISA', 'BANK_TRANSFER', 'CASH', 'OTHER'],
+          type: "string",
+          enum: ["JAZZCASH", "EASYPAISA", "BANK_TRANSFER", "CASH", "OTHER"],
         },
-        transactionReference: { type: 'string' },
-        notes: { type: 'string' },
-        file: { type: 'string', format: 'binary' },
+        transactionReference: { type: "string" },
+        notes: { type: "string" },
+        file: { type: "string", format: "binary" },
       },
     },
   })
   @ApiOperation({
-    summary: 'Submit a manual top-up request (balance changes on approval)',
+    summary: "Submit a manual top-up request (balance changes on approval)",
   })
   async submitTopUp(
-    @GetUser('sub') userId: string,
+    @GetUser("sub") userId: string,
     @Body() dto: CreateTopUpDto,
     @UploadedFile(
       new ParseFilePipe({
@@ -113,20 +113,20 @@ export class CustomerWalletController {
     return this.topUpsService.submitTopUp(userId, dto, file);
   }
 
-  @Get('/topups')
-  @ApiOperation({ summary: 'View my top-up request history' })
+  @Get("/topups")
+  @ApiOperation({ summary: "View my top-up request history" })
   async listTopUps(
-    @GetUser('sub') userId: string,
+    @GetUser("sub") userId: string,
     @Query() query: TopUpQueryDto,
   ) {
     return this.topUpsService.listMyTopUps(userId, query);
   }
 
-  @Get('/topups/:id')
-  @ApiOperation({ summary: 'View a top-up request' })
+  @Get("/topups/:id")
+  @ApiOperation({ summary: "View a top-up request" })
   async getTopUp(
-    @GetUser('sub') userId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser("sub") userId: string,
+    @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.topUpsService.getMyTopUp(userId, id);
   }

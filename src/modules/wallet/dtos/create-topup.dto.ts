@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type } from "class-transformer";
 import {
   IsEnum,
   IsNotEmpty,
@@ -8,16 +8,16 @@ import {
   Max,
   MaxLength,
   Min,
-} from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { PaymentMethod } from 'generated/prisma/client';
+} from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { PaymentMethod } from "generated/prisma/client";
 
 export class CreateTopUpDto {
-  @ApiProperty({ description: 'Amount to top up (PKR)', example: 5000 })
+  @ApiProperty({ description: "Amount to top up (PKR)", example: 5000 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(1, { message: 'Top-up amount must be at least 1' })
-  @Max(1000000, { message: 'Top-up amount cannot exceed 1,000,000' })
+  @Min(1, { message: "Top-up amount must be at least 1" })
+  @Max(1000000, { message: "Top-up amount cannot exceed 1,000,000" })
   amount!: number;
 
   @ApiProperty({ enum: PaymentMethod })

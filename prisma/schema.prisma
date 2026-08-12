@@ -16,6 +16,33 @@ datasource db {
 }
 
 // Enums
+// How the account authenticates: email/password or a Google social login.
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+
+  @@map("auth_provider")
+}
+
+enum EmailTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+
+  @@map("email_token_type")
+}
+
+// ─── Module 19: Provider Ranking ───────────────────────────────────────
+
+enum ProviderRank {
+  NONE
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+
+  @@map("provider_rank")
+}
+
 enum UserRole {
   CUSTOMER
   PROVIDER
@@ -158,6 +185,9 @@ enum NotificationType {
   WITHDRAWAL_COMPLETED
   WITHDRAWAL_REJECTED
   WITHDRAWAL_CANCELLED
+  RANK_UPGRADED
+  RANK_DOWNGRADED
+  URGENT_JOB_POSTED
   SYSTEM_ANNOUNCEMENT
 
   @@map("notification_type")
@@ -333,15 +363,24 @@ model City {
 model User {
   id                 String             @id @default(uuid())
   fullName           String             @db.VarChar(100)
-  phone              String             @unique @db.VarChar(20)
+  // Nullable: Google sign-up accounts have no phone number or password and
+  // choose their city later from the profile screen.
+  phone              String?            @unique @db.VarChar(20)
   email              String             @unique @db.VarChar(100)
-  passwordHash       String             @db.Text
+  passwordHash       String?            @db.Text
   role               UserRole           @default(CUSTOMER)
-  cityId             String
+  cityId             String?
   address            String?            @db.VarChar(500)
   status             UserStatus         @default(ACTIVE)
   profileCompleted   Boolean            @default(true)
   verificationStatus VerificationStatus @default(APPROVED)
+
+  // Social login metadata
+  authProvider       AuthProvider       @default(LOCAL)
+  googleId           String?            @unique
+  avatarUrl          String?            @db.VarChar(500)
+  emailVerified      Boolean            @default(true)
+  emailVerifiedAt    DateTime?
 
   refreshToken String? @db.Text // Legacy field - kept for backward compatibility
   isActive     Boolean  @default(true) // for soft delete
@@ -354,8 +393,11 @@ model User {
   deletedAt     DateTime?
 
   // Relations
-  city          City            @relation(fields: [cityId], references: [id])
+  city          City?           @relation(fields: [cityId], references: [id])
   refreshTokens RefreshToken[]
+  emailTokens   EmailToken[]
+  providerRanking   ProviderRanking?
+  providerRankHistory ProviderRankHistory[]
   providerProfile ProviderProfile?
   customerBookings  Booking[]  @relation("CustomerBookings")
   providerBookings  Booking[]  @relation("ProviderBookings")
@@ -408,6 +450,66 @@ model RefreshToken {
   @@index([userId])
   @@index([token])
   @@map("refresh_tokens")
+}
+
+// One-time tokens for email verification and password reset. Only the
+// bcrypt hash is stored; the raw token travels in the email link.
+model EmailToken {
+  id         String         @id @default(uuid())
+  userId     String
+  type       EmailTokenType
+  tokenHash  String         @unique @db.Text
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("email_tokens")
+}
+
+// ─── Module 19: Provider Ranking ───────────────────────────────────────
+
+/**
+ * Current ranking snapshot for a provider (one row per provider). Kept
+ * denormalized on purpose so rank reads (profile, listings, feed boosts)
+ * never need to count bookings or aggregate ratings on the fly.
+ * `completedJobs` and `averageRating` mirror the values used for the last
+ * evaluation — NOT live counters.
+ */
+model ProviderRanking {
+  id              String       @id @default(uuid())
+  providerId      String       @unique
+  currentRank     ProviderRank @default(NONE)
+  completedJobs   Int          @default(0)
+  averageRating   Decimal      @default(0) @db.Decimal(3, 2)
+  rankAchievedAt  DateTime?
+  lastEvaluatedAt DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  provider User @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([currentRank])
+  @@map("provider_rankings")
+}
+
+/** Immutable audit trail of every rank change (upgrade or downgrade). */
+model ProviderRankHistory {
+  id            String       @id @default(uuid())
+  providerId    String
+  fromRank      ProviderRank
+  toRank        ProviderRank
+  completedJobs Int
+  averageRating Decimal      @db.Decimal(3, 2)
+  reason        String?      @db.VarChar(200)
+  changedAt     DateTime     @default(now())
+
+  provider User @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, changedAt])
+  @@map("provider_rank_history")
 }
 
 model ServiceCategory {
@@ -519,6 +621,10 @@ model Job {
   expiresAt       DateTime
   preferredSchedule DateTime?
   additionalNotes String?   @db.VarChar(1000)
+  // Module 20: urgent jobs expire in 6 hours (vs 24h normal), can only be
+  // set by the customer at creation time, and float to the top of the
+  // provider feed.
+  isUrgent        Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -538,6 +644,9 @@ model Job {
   @@index([status])
   @@index([expiresAt])
   @@index([status, categoryId, expiresAt])
+  // Urgent feed: `isUrgent` first, then expiry — powers the provider feed
+  // ordering without a sort at the application layer.
+  @@index([isUrgent, status, expiresAt])
   @@map("jobs")
 }
 

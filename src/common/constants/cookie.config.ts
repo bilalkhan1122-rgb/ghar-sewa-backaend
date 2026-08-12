@@ -1,4 +1,4 @@
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 // The deployed API and the app are served from different domains, so auth
 // cookies are cross-site: browsers only send those when SameSite is 'none',
@@ -6,13 +6,13 @@ const isProduction = process.env.NODE_ENV === 'production';
 // made authenticated requests 401 against the deployed backend.) CSRF
 // protection therefore rests on the CORS allowlist — keep CORS_ORIGIN tight.
 const crossSiteOptions = {
-  sameSite: isProduction ? ('none' as const) : ('lax' as const),
+  sameSite: isProduction ? ("none" as const) : ("lax" as const),
   secure: isProduction,
 };
 
 export const COOKIE_CONFIG = {
   ACCESS_TOKEN: {
-    name: 'accessToken',
+    name: "accessToken",
     options: {
       httpOnly: true,
       ...crossSiteOptions,
@@ -20,7 +20,7 @@ export const COOKIE_CONFIG = {
     },
   },
   REFRESH_TOKEN: {
-    name: 'refreshToken',
+    name: "refreshToken",
     options: {
       httpOnly: true,
       ...crossSiteOptions,

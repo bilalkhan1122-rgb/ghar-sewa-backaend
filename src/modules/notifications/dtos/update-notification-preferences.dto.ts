@@ -1,9 +1,9 @@
-import { IsOptional, IsBoolean } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsBoolean } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class UpdateNotificationPreferencesDto {
   @ApiPropertyOptional({
-    description: 'Job notifications (new jobs, bids)',
+    description: "Job notifications (new jobs, bids)",
     example: true,
   })
   @IsOptional()
@@ -11,7 +11,7 @@ export class UpdateNotificationPreferencesDto {
   jobEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Chat notifications',
+    description: "Chat notifications",
     example: true,
   })
   @IsOptional()
@@ -19,7 +19,7 @@ export class UpdateNotificationPreferencesDto {
   chatEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Booking notifications (started, completed, confirmed)',
+    description: "Booking notifications (started, completed, confirmed)",
     example: true,
   })
   @IsOptional()
@@ -27,7 +27,7 @@ export class UpdateNotificationPreferencesDto {
   bookingEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Marketing notifications',
+    description: "Marketing notifications",
     example: false,
   })
   @IsOptional()
@@ -35,7 +35,7 @@ export class UpdateNotificationPreferencesDto {
   marketingEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: 'System notifications (verification, wallet, disputes)',
+    description: "System notifications (verification, wallet, disputes)",
     example: true,
   })
   @IsOptional()

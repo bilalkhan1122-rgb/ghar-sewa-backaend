@@ -1,17 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { PushDeliveryService } from './push-delivery.service';
-import { RegisterDeviceDto } from './dtos/register-device.dto';
-import { UpdateNotificationPreferencesDto } from './dtos/update-notification-preferences.dto';
-import { NotificationQueryDto } from './dtos/notification-query.dto';
-import { Logger } from 'nestjs-pino';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
+import { PushDeliveryService } from "./push-delivery.service";
+import { RegisterDeviceDto } from "./dtos/register-device.dto";
+import { UpdateNotificationPreferencesDto } from "./dtos/update-notification-preferences.dto";
+import { NotificationQueryDto } from "./dtos/notification-query.dto";
+import { Logger } from "nestjs-pino";
 import {
   Prisma,
   Notification,
   NotificationType,
   NotificationCategory,
   NotificationDeliveryStatus,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 export interface SendNotificationInput {
   userId: string;
@@ -30,23 +30,23 @@ export interface SendNotificationInput {
  */
 const CATEGORY_TO_PREFERENCE: Record<
   NotificationCategory,
-  | 'jobEnabled'
-  | 'chatEnabled'
-  | 'bookingEnabled'
-  | 'marketingEnabled'
-  | 'systemEnabled'
+  | "jobEnabled"
+  | "chatEnabled"
+  | "bookingEnabled"
+  | "marketingEnabled"
+  | "systemEnabled"
 > = {
-  [NotificationCategory.JOB]: 'jobEnabled',
-  [NotificationCategory.BID]: 'jobEnabled',
-  [NotificationCategory.CHAT]: 'chatEnabled',
-  [NotificationCategory.BOOKING]: 'bookingEnabled',
-  [NotificationCategory.REVIEW]: 'bookingEnabled',
-  [NotificationCategory.VERIFICATION]: 'systemEnabled',
-  [NotificationCategory.WALLET]: 'systemEnabled',
-  [NotificationCategory.DISPUTE]: 'systemEnabled',
-  [NotificationCategory.PENALTY]: 'systemEnabled',
-  [NotificationCategory.SYSTEM]: 'systemEnabled',
-  [NotificationCategory.MARKETING]: 'marketingEnabled',
+  [NotificationCategory.JOB]: "jobEnabled",
+  [NotificationCategory.BID]: "jobEnabled",
+  [NotificationCategory.CHAT]: "chatEnabled",
+  [NotificationCategory.BOOKING]: "bookingEnabled",
+  [NotificationCategory.REVIEW]: "bookingEnabled",
+  [NotificationCategory.VERIFICATION]: "systemEnabled",
+  [NotificationCategory.WALLET]: "systemEnabled",
+  [NotificationCategory.DISPUTE]: "systemEnabled",
+  [NotificationCategory.PENALTY]: "systemEnabled",
+  [NotificationCategory.SYSTEM]: "systemEnabled",
+  [NotificationCategory.MARKETING]: "marketingEnabled",
 };
 
 const TYPE_TO_CATEGORY: Record<NotificationType, NotificationCategory> = {
@@ -99,6 +99,11 @@ const TYPE_TO_CATEGORY: Record<NotificationType, NotificationCategory> = {
   [NotificationType.WITHDRAWAL_COMPLETED]: NotificationCategory.WALLET,
   [NotificationType.WITHDRAWAL_REJECTED]: NotificationCategory.WALLET,
   [NotificationType.WITHDRAWAL_CANCELLED]: NotificationCategory.WALLET,
+  // Module 19: provider rank changes
+  [NotificationType.RANK_UPGRADED]: NotificationCategory.SYSTEM,
+  [NotificationType.RANK_DOWNGRADED]: NotificationCategory.SYSTEM,
+  // Module 20: urgent jobs
+  [NotificationType.URGENT_JOB_POSTED]: NotificationCategory.JOB,
   [NotificationType.SYSTEM_ANNOUNCEMENT]: NotificationCategory.SYSTEM,
 };
 
@@ -130,7 +135,7 @@ export class NotificationsService {
         if (prefs && !prefs[prefKey]) {
           this.logger.debug(
             { userId: input.userId, type: input.type },
-            'Notification skipped (preference disabled)',
+            "Notification skipped (preference disabled)",
           );
           return null;
         }
@@ -166,7 +171,7 @@ export class NotificationsService {
       const error = err as { message?: string };
       this.logger.error(
         { err: error, userId: input.userId, type: input.type },
-        'Failed to send notification',
+        "Failed to send notification",
       );
       return null;
     }
@@ -201,7 +206,7 @@ export class NotificationsService {
       if (devices.length === 0) {
         this.logger.debug(
           { userId, notificationId },
-          'No registered devices — notification stored in-app only',
+          "No registered devices — notification stored in-app only",
         );
         return;
       }
@@ -216,9 +221,9 @@ export class NotificationsService {
         );
         if (!result.delivered) {
           allDelivered = false;
-          firstError = firstError ?? result.error ?? 'PUSH_FAILED';
+          firstError = firstError ?? result.error ?? "PUSH_FAILED";
           // Unregister stale tokens automatically
-          if (result.error === 'DEVICE_UNREGISTERED') {
+          if (result.error === "DEVICE_UNREGISTERED") {
             await this.prisma.deviceRegistration.deleteMany({
               where: { id: device.id },
             });
@@ -253,7 +258,7 @@ export class NotificationsService {
       });
       this.logger.error(
         { err: error, notificationId },
-        'Notification delivery failed',
+        "Notification delivery failed",
       );
     }
   }
@@ -277,7 +282,7 @@ export class NotificationsService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' }, // newest first
+        orderBy: { createdAt: "desc" }, // newest first
       }),
       this.prisma.notification.count({ where }),
     ]);
@@ -304,7 +309,7 @@ export class NotificationsService {
       });
 
     if (!notification) {
-      throw new NotFoundException('Notification not found');
+      throw new NotFoundException("Notification not found");
     }
 
     return notification;
@@ -340,7 +345,7 @@ export class NotificationsService {
       data: { deletedAt: new Date() },
     });
 
-    return { message: 'Notification deleted successfully', id: notificationId };
+    return { message: "Notification deleted successfully", id: notificationId };
   }
 
   async unreadCount(userId: string) {
@@ -382,7 +387,7 @@ export class NotificationsService {
   async listDevices(userId: string) {
     return this.prisma.deviceRegistration.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -392,11 +397,11 @@ export class NotificationsService {
     });
 
     if (!device) {
-      throw new NotFoundException('Device not found');
+      throw new NotFoundException("Device not found");
     }
 
     await this.prisma.deviceRegistration.delete({ where: { id: deviceId } });
-    return { message: 'Device unregistered successfully' };
+    return { message: "Device unregistered successfully" };
   }
 
   // ─── Notification Preferences ────────────────────────────────────────

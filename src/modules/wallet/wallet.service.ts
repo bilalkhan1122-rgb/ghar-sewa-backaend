@@ -4,13 +4,13 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Logger } from 'nestjs-pino';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { AdminAuditService } from 'src/common/services/admin-audit.service';
-import { WalletTransactionQueryDto } from './dtos/wallet-transaction-query.dto';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Logger } from "nestjs-pino";
+import { PrismaService } from "src/prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
 import {
   Prisma,
   UserRole,
@@ -21,7 +21,7 @@ import {
   WalletTransactionStatus,
   DisputeResolution,
   NotificationType,
-} from 'generated/prisma/client';
+} from "generated/prisma/client";
 
 /** Default platform commission rate (7.5%) — overridable via COMMISSION_RATE. */
 export const DEFAULT_COMMISSION_RATE = 0.075;
@@ -76,7 +76,7 @@ export class WalletService {
   // ─── Configuration ───────────────────────────────────────────────────
 
   get commissionRate(): number {
-    const raw = this.config.get<string>('COMMISSION_RATE');
+    const raw = this.config.get<string>("COMMISSION_RATE");
     const parsed = raw === undefined ? DEFAULT_COMMISSION_RATE : Number(raw);
     return Number.isFinite(parsed) && parsed >= 0 && parsed < 1
       ? parsed
@@ -84,7 +84,7 @@ export class WalletService {
   }
 
   get minWithdrawal(): Prisma.Decimal {
-    const raw = this.config.get<string>('WITHDRAWAL_MIN');
+    const raw = this.config.get<string>("WITHDRAWAL_MIN");
     const parsed = raw === undefined ? DEFAULT_MIN_WITHDRAWAL : Number(raw);
     return new Prisma.Decimal(
       Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MIN_WITHDRAWAL,
@@ -92,7 +92,7 @@ export class WalletService {
   }
 
   get maxWithdrawal(): Prisma.Decimal {
-    const raw = this.config.get<string>('WITHDRAWAL_MAX');
+    const raw = this.config.get<string>("WITHDRAWAL_MAX");
     const parsed = raw === undefined ? DEFAULT_MAX_WITHDRAWAL : Number(raw);
     return new Prisma.Decimal(
       Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_WITHDRAWAL,
@@ -117,10 +117,10 @@ export class WalletService {
       select: { role: true },
     });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
     if (user.role === UserRole.ADMIN) {
-      throw new ForbiddenException('Admins do not have wallets');
+      throw new ForbiddenException("Admins do not have wallets");
     }
 
     const type =
@@ -161,7 +161,7 @@ export class WalletService {
       Prisma.Decimal.ROUND_HALF_UP,
     );
     if (amountDec.lte(0)) {
-      throw new BadRequestException('Credit amount must be positive');
+      throw new BadRequestException("Credit amount must be positive");
     }
 
     const wallet = await tx.wallet.findUniqueOrThrow({
@@ -210,7 +210,7 @@ export class WalletService {
       Prisma.Decimal.ROUND_HALF_UP,
     );
     if (amountDec.lte(0)) {
-      throw new BadRequestException('Debit amount must be positive');
+      throw new BadRequestException("Debit amount must be positive");
     }
 
     const wallet = await tx.wallet.findUniqueOrThrow({
@@ -227,7 +227,7 @@ export class WalletService {
       },
     });
     if (result.count !== 1) {
-      throw new BadRequestException('Insufficient wallet balance');
+      throw new BadRequestException("Insufficient wallet balance");
     }
 
     return tx.walletTransaction.create({
@@ -275,7 +275,7 @@ export class WalletService {
       },
     });
     if (result.count !== 1) {
-      throw new BadRequestException('Insufficient available balance');
+      throw new BadRequestException("Insufficient available balance");
     }
 
     return tx.walletTransaction.create({
@@ -323,7 +323,7 @@ export class WalletService {
       },
     });
     if (result.count !== 1) {
-      throw new BadRequestException('Held balance is insufficient');
+      throw new BadRequestException("Held balance is insufficient");
     }
 
     return tx.walletTransaction.create({
@@ -373,7 +373,7 @@ export class WalletService {
       },
     });
     if (result.count !== 1) {
-      throw new BadRequestException('Held balance is insufficient');
+      throw new BadRequestException("Held balance is insufficient");
     }
 
     return tx.walletTransaction.create({
@@ -424,9 +424,9 @@ export class WalletService {
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
-    if (booking.status !== 'COMPLETED') {
+    if (booking.status !== "COMPLETED") {
       throw new BadRequestException(
         `Job payments can only be processed for completed bookings (current: ${booking.status})`,
       );
@@ -449,7 +449,7 @@ export class WalletService {
           where: { processingKey: `${paymentKey}:customer` },
         });
         if (existing) {
-          throw new ConflictException('This booking has already been paid');
+          throw new ConflictException("This booking has already been paid");
         }
 
         const shortId = booking.id.slice(0, 8);
@@ -460,7 +460,7 @@ export class WalletService {
           WalletTransactionType.JOB_PAYMENT,
           gross,
           {
-            referenceType: 'BOOKING',
+            referenceType: "BOOKING",
             referenceId: booking.id,
             processingKey: `${paymentKey}:customer`,
             description: `Payment for booking #${shortId}`,
@@ -473,7 +473,7 @@ export class WalletService {
           WalletTransactionType.PROVIDER_EARNING,
           gross,
           {
-            referenceType: 'BOOKING',
+            referenceType: "BOOKING",
             referenceId: booking.id,
             processingKey: `${paymentKey}:provider`,
             description: `Earnings for booking #${shortId}`,
@@ -486,7 +486,7 @@ export class WalletService {
           WalletTransactionType.PLATFORM_COMMISSION,
           commission,
           {
-            referenceType: 'BOOKING',
+            referenceType: "BOOKING",
             referenceId: booking.id,
             processingKey: `${paymentKey}:commission`,
             description: `Platform commission (${this.commissionRate * 100}%) for booking #${shortId}`,
@@ -496,25 +496,25 @@ export class WalletService {
         await this.audit(tx, {
           walletId: customerWallet.id,
           actorUserId: booking.customerId,
-          action: 'JOB_PAYMENT_DEBIT',
+          action: "JOB_PAYMENT_DEBIT",
           newValues: {
             bookingId,
             amount: gross.toString(),
-            type: 'JOB_PAYMENT',
+            type: "JOB_PAYMENT",
           },
-          referenceType: 'BOOKING',
+          referenceType: "BOOKING",
           referenceId: booking.id,
         });
         await this.audit(tx, {
           walletId: providerWallet.id,
-          action: 'JOB_PAYMENT_CREDIT',
+          action: "JOB_PAYMENT_CREDIT",
           newValues: {
             bookingId,
             gross: gross.toString(),
             commission: commission.toString(),
             net: net.toString(),
           },
-          referenceType: 'BOOKING',
+          referenceType: "BOOKING",
           referenceId: booking.id,
         });
 
@@ -536,22 +536,22 @@ export class WalletService {
       void this.notifications.send({
         userId: booking.customerId,
         type: NotificationType.JOB_PAYMENT_COMPLETED,
-        title: 'Payment processed 💳',
+        title: "Payment processed 💳",
         message: `Rs. ${gross.toString()} was charged for your booking.`,
-        relatedEntityType: 'BOOKING',
+        relatedEntityType: "BOOKING",
         relatedEntityId: bookingId,
       });
       void this.notifications.send({
         userId: booking.providerId,
         type: NotificationType.JOB_PAYMENT_COMPLETED,
-        title: 'Payment received 💰',
+        title: "Payment received 💰",
         message: `You earned Rs. ${net.toString()} for booking #${booking.id.slice(0, 8)} (after commission).`,
-        relatedEntityType: 'BOOKING',
+        relatedEntityType: "BOOKING",
         relatedEntityId: bookingId,
       });
 
       this.logger.log({
-        message: 'Job payment processed',
+        message: "Job payment processed",
         bookingId,
         gross: gross.toString(),
         commission: commission.toString(),
@@ -562,9 +562,9 @@ export class WalletService {
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
+        err.code === "P2002"
       ) {
-        throw new ConflictException('This booking has already been paid');
+        throw new ConflictException("This booking has already been paid");
       }
       throw err;
     }
@@ -594,7 +594,7 @@ export class WalletService {
       await this.audit(t, {
         walletId: wallet.id,
         actorUserId: userId,
-        action: 'REFUND_CREDIT',
+        action: "REFUND_CREDIT",
         newValues: { amount: row.amount.toString() },
         referenceType: extra.referenceType,
         referenceId: extra.referenceId,
@@ -605,7 +605,7 @@ export class WalletService {
     void this.notifications.send({
       userId,
       type: NotificationType.REFUND_RECEIVED,
-      title: 'Refund received 💸',
+      title: "Refund received 💸",
       message: `Rs. ${new Prisma.Decimal(amount).toString()} was credited to your wallet.`,
       relatedEntityType: extra.referenceType,
       relatedEntityId: extra.referenceId,
@@ -636,7 +636,7 @@ export class WalletService {
       await this.audit(t, {
         walletId: wallet.id,
         actorUserId: providerId,
-        action: 'REFUND_DEBIT',
+        action: "REFUND_DEBIT",
         newValues: { amount: row.amount.toString() },
         referenceType: extra.referenceType,
         referenceId: extra.referenceId,
@@ -647,7 +647,7 @@ export class WalletService {
     void this.notifications.send({
       userId: providerId,
       type: NotificationType.WALLET_UPDATED,
-      title: 'Refund deducted 💸',
+      title: "Refund deducted 💸",
       message: `Rs. ${new Prisma.Decimal(amount).toString()} was deducted from your wallet for a refund.`,
       relatedEntityType: extra.referenceType,
       relatedEntityId: extra.referenceId,
@@ -701,7 +701,7 @@ export class WalletService {
           WalletTransactionType.REFUND,
           amountDec,
           {
-            referenceType: 'DISPUTE',
+            referenceType: "DISPUTE",
             referenceId: params.disputeId,
             processingKey: `refund:${params.disputeId}:customer`,
             description: `Refund (${params.resolution}) for booking #${params.bookingId.slice(0, 8)}`,
@@ -713,7 +713,7 @@ export class WalletService {
           WalletTransactionType.REFUND,
           amountDec,
           {
-            referenceType: 'DISPUTE',
+            referenceType: "DISPUTE",
             referenceId: params.disputeId,
             processingKey: `refund:${params.disputeId}:provider`,
             description: `Provider deduction (${params.resolution}) for booking #${params.bookingId.slice(0, 8)}`,
@@ -723,23 +723,23 @@ export class WalletService {
         await this.audit(tx, {
           walletId: customerWallet.id,
           actorAdminId: params.adminId,
-          action: 'DISPUTE_REFUND_CUSTOMER_CREDIT',
+          action: "DISPUTE_REFUND_CUSTOMER_CREDIT",
           newValues: {
             amount: amountDec.toString(),
             resolution: params.resolution,
           },
-          referenceType: 'DISPUTE',
+          referenceType: "DISPUTE",
           referenceId: params.disputeId,
         });
         await this.audit(tx, {
           walletId: providerWallet.id,
           actorAdminId: params.adminId,
-          action: 'DISPUTE_REFUND_PROVIDER_DEBIT',
+          action: "DISPUTE_REFUND_PROVIDER_DEBIT",
           newValues: {
             amount: amountDec.toString(),
             resolution: params.resolution,
           },
-          referenceType: 'DISPUTE',
+          referenceType: "DISPUTE",
           referenceId: params.disputeId,
         });
 
@@ -754,23 +754,23 @@ export class WalletService {
         void this.notifications.send({
           userId: params.customerId,
           type: NotificationType.REFUND_RECEIVED,
-          title: 'Refund received 💸',
+          title: "Refund received 💸",
           message: `Rs. ${amountDec.toString()} was refunded to your wallet after dispute resolution.`,
-          relatedEntityType: 'DISPUTE',
+          relatedEntityType: "DISPUTE",
           relatedEntityId: params.disputeId,
         });
         void this.notifications.send({
           userId: params.providerId,
           type: NotificationType.WALLET_UPDATED,
-          title: 'Refund deducted 💸',
+          title: "Refund deducted 💸",
           message: `Rs. ${amountDec.toString()} was deducted from your wallet for a refund on booking #${params.bookingId.slice(0, 8)}.`,
-          relatedEntityType: 'DISPUTE',
+          relatedEntityType: "DISPUTE",
           relatedEntityId: params.disputeId,
         });
       }
 
       this.logger.log({
-        message: 'Dispute refund processed',
+        message: "Dispute refund processed",
         disputeId: params.disputeId,
         bookingId: params.bookingId,
         amount: amountDec.toString(),
@@ -782,7 +782,7 @@ export class WalletService {
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
+        err.code === "P2002"
       ) {
         // Concurrent duplicate — treat as already processed.
         return {
@@ -800,13 +800,13 @@ export class WalletService {
   async adjustWallet(
     adminId: string,
     userId: string,
-    dto: { direction: 'credit' | 'debit'; amount: number; reason: string },
+    dto: { direction: "credit" | "debit"; amount: number; reason: string },
   ) {
     const wallet = await this.ensureWallet(userId);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const ledger =
-        dto.direction === 'credit'
+        dto.direction === "credit"
           ? await this.credit(
               tx,
               wallet.id,
@@ -835,17 +835,17 @@ export class WalletService {
     void this.notifications.send({
       userId,
       type: NotificationType.WALLET_UPDATED,
-      title: 'Wallet updated 💰',
-      message: `Your wallet was ${dto.direction === 'credit' ? 'credited' : 'debited'} Rs. ${dto.amount}. ${dto.reason}`,
-      relatedEntityType: 'WALLET',
+      title: "Wallet updated 💰",
+      message: `Your wallet was ${dto.direction === "credit" ? "credited" : "debited"} Rs. ${dto.amount}. ${dto.reason}`,
+      relatedEntityType: "WALLET",
       relatedEntityId: wallet.id,
       force: true,
     });
 
     await this.adminAudit.record({
       adminId,
-      action: 'WALLET_ADJUSTED',
-      entityType: 'WALLET',
+      action: "WALLET_ADJUSTED",
+      entityType: "WALLET",
       entityId: wallet.id,
       newValues: {
         userId,
@@ -856,7 +856,7 @@ export class WalletService {
     });
 
     this.logger.log({
-      message: 'Wallet adjusted by admin',
+      message: "Wallet adjusted by admin",
       adminId,
       userId,
       direction: dto.direction,
@@ -874,10 +874,10 @@ export class WalletService {
       where: { userId },
     });
     if (!wallet) {
-      throw new NotFoundException('Wallet not found for this user');
+      throw new NotFoundException("Wallet not found for this user");
     }
     if (wallet.status === WalletStatus.FROZEN) {
-      throw new BadRequestException('Wallet is already frozen');
+      throw new BadRequestException("Wallet is already frozen");
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -888,7 +888,7 @@ export class WalletService {
       await this.audit(tx, {
         walletId: wallet.id,
         actorAdminId: adminId,
-        action: 'WALLET_FROZEN',
+        action: "WALLET_FROZEN",
         previousValues: { status: wallet.status },
         newValues: { status: WalletStatus.FROZEN, reason },
       });
@@ -896,8 +896,8 @@ export class WalletService {
     });
     await this.adminAudit.record({
       adminId,
-      action: 'WALLET_FROZEN',
-      entityType: 'WALLET',
+      action: "WALLET_FROZEN",
+      entityType: "WALLET",
       entityId: wallet.id,
       newValues: { userId, reason },
     });
@@ -905,14 +905,14 @@ export class WalletService {
     void this.notifications.send({
       userId,
       type: NotificationType.WALLET_UPDATED,
-      title: 'Wallet frozen 🔒',
+      title: "Wallet frozen 🔒",
       message: `Your wallet has been frozen. Reason: ${reason}`,
-      relatedEntityType: 'WALLET',
+      relatedEntityType: "WALLET",
       relatedEntityId: wallet.id,
       force: true,
     });
     this.logger.log({
-      message: 'Wallet frozen by admin',
+      message: "Wallet frozen by admin",
       adminId,
       userId,
       reason,
@@ -927,10 +927,10 @@ export class WalletService {
       where: { userId },
     });
     if (!wallet) {
-      throw new NotFoundException('Wallet not found for this user');
+      throw new NotFoundException("Wallet not found for this user");
     }
     if (wallet.status === WalletStatus.ACTIVE) {
-      throw new BadRequestException('Wallet is already active');
+      throw new BadRequestException("Wallet is already active");
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -941,7 +941,7 @@ export class WalletService {
       await this.audit(tx, {
         walletId: wallet.id,
         actorAdminId: adminId,
-        action: 'WALLET_UNFROZEN',
+        action: "WALLET_UNFROZEN",
         previousValues: { status: wallet.status },
         newValues: { status: WalletStatus.ACTIVE, reason: reason ?? null },
       });
@@ -949,8 +949,8 @@ export class WalletService {
     });
     await this.adminAudit.record({
       adminId,
-      action: 'WALLET_UNFROZEN',
-      entityType: 'WALLET',
+      action: "WALLET_UNFROZEN",
+      entityType: "WALLET",
       entityId: wallet.id,
       newValues: { userId, reason: reason ?? null },
     });
@@ -958,13 +958,13 @@ export class WalletService {
     void this.notifications.send({
       userId,
       type: NotificationType.WALLET_UPDATED,
-      title: 'Wallet unfrozen 🔓',
-      message: 'Your wallet has been unfrozen.',
-      relatedEntityType: 'WALLET',
+      title: "Wallet unfrozen 🔓",
+      message: "Your wallet has been unfrozen.",
+      relatedEntityType: "WALLET",
       relatedEntityId: wallet.id,
       force: true,
     });
-    this.logger.log({ message: 'Wallet unfrozen by admin', adminId, userId });
+    this.logger.log({ message: "Wallet unfrozen by admin", adminId, userId });
 
     return updated;
   }
@@ -989,7 +989,7 @@ export class WalletService {
       this.prisma.withdrawalRequest.aggregate({
         where: {
           walletId: wallet.id,
-          status: { in: ['PENDING', 'APPROVED', 'PROCESSING'] },
+          status: { in: ["PENDING", "APPROVED", "PROCESSING"] },
         },
         _sum: { amount: true },
       }),
@@ -1060,12 +1060,12 @@ export class WalletService {
       this.prisma.withdrawalRequest.aggregate({
         where: {
           walletId: wallet.id,
-          status: { in: ['PENDING', 'APPROVED', 'PROCESSING'] },
+          status: { in: ["PENDING", "APPROVED", "PROCESSING"] },
         },
         _sum: { amount: true },
       }),
       this.prisma.booking.count({
-        where: { providerId, status: 'COMPLETED' },
+        where: { providerId, status: "COMPLETED" },
       }),
     ]);
 
@@ -1097,7 +1097,7 @@ export class WalletService {
       where: { id: transactionId, walletId: wallet.id },
     });
     if (!transaction) {
-      throw new NotFoundException('Transaction not found');
+      throw new NotFoundException("Transaction not found");
     }
     return transaction;
   }
@@ -1124,7 +1124,7 @@ export class WalletService {
         where,
         skip,
         take: limit,
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { updatedAt: "desc" },
         include: {
           user: {
             select: {
@@ -1166,7 +1166,7 @@ export class WalletService {
       },
     });
     if (!wallet) {
-      throw new NotFoundException('Wallet not found for this user');
+      throw new NotFoundException("Wallet not found for this user");
     }
     return wallet;
   }
@@ -1201,7 +1201,7 @@ export class WalletService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       this.prisma.walletTransaction.count({ where }),
     ]);

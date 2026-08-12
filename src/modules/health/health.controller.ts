@@ -1,15 +1,15 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Controller, Get } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import {
   HealthCheckService,
   HealthCheck,
   PrismaHealthIndicator,
-} from '@nestjs/terminus';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { Public } from 'src/common/decorators/public.decorator';
+} from "@nestjs/terminus";
+import { PrismaService } from "src/prisma/prisma.service";
+import { Public } from "src/common/decorators/public.decorator";
 
-@ApiTags('Health')
-@Controller('health')
+@ApiTags("Health")
+@Controller("health")
 export class HealthController {
   constructor(
     private health: HealthCheckService,
@@ -22,19 +22,19 @@ export class HealthController {
   @HealthCheck()
   check() {
     return this.health.check([
-      () => this.prismaHealth.pingCheck('database', this.prisma),
+      () => this.prismaHealth.pingCheck("database", this.prisma),
     ]);
   }
 
-  @Get('ready')
+  @Get("ready")
   @Public()
   @HealthCheck()
   checkReadiness() {
     return this.health.check([
-      () => this.prismaHealth.pingCheck('database', this.prisma),
+      () => this.prismaHealth.pingCheck("database", this.prisma),
       () => ({
         application: {
-          status: 'up',
+          status: "up",
           uptime: process.uptime(),
           timestamp: new Date().toISOString(),
         },
@@ -42,12 +42,12 @@ export class HealthController {
     ]);
   }
 
-  @Get('live')
+  @Get("live")
   @Public()
   checkLiveness() {
     // Lightweight check - just return if app is running
     return {
-      status: 'ok',
+      status: "ok",
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       pid: process.pid,

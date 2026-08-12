@@ -6,11 +6,11 @@ import {
   IsString,
   MaxLength,
   Min,
-} from 'class-validator';
-import { DisputeResolution } from 'generated/prisma/client';
+} from "class-validator";
+import { DisputeResolution } from "generated/prisma/client";
 
 export class ResolveDisputeDto {
-  @IsEnum(DisputeResolution, { message: 'Invalid resolution type' })
+  @IsEnum(DisputeResolution, { message: "Invalid resolution type" })
   @IsNotEmpty()
   resolution!: DisputeResolution;
 

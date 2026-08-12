@@ -4,7 +4,7 @@ import {
   IsString,
   IsUUID,
   MaxLength,
-} from 'class-validator';
+} from "class-validator";
 
 export class RaiseDisputeDto {
   @IsUUID()
@@ -12,7 +12,7 @@ export class RaiseDisputeDto {
   bookingId!: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Dispute reason is required' })
+  @IsNotEmpty({ message: "Dispute reason is required" })
   @MaxLength(200)
   reason!: string;
 

@@ -1,6 +1,6 @@
-import { SetMetadata } from '@nestjs/common';
+import { SetMetadata } from "@nestjs/common";
 
-export const PERMISSIONS_KEY = 'permissions';
+export const PERMISSIONS_KEY = "permissions";
 
 /**
  * Declares the admin permissions required to access a route.

@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type } from "class-transformer";
 import {
   IsEnum,
   IsNotEmpty,
@@ -7,15 +7,15 @@ import {
   IsString,
   MaxLength,
   Min,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PaymentMethod } from 'generated/prisma/client';
+} from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { PaymentMethod } from "generated/prisma/client";
 
 export class CreateWithdrawalDto {
-  @ApiProperty({ description: 'Amount to withdraw (PKR)', example: 5000 })
+  @ApiProperty({ description: "Amount to withdraw (PKR)", example: 5000 })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(1, { message: 'Withdrawal amount must be positive' })
+  @Min(1, { message: "Withdrawal amount must be positive" })
   amount!: number;
 
   @ApiProperty({ enum: PaymentMethod })
@@ -25,13 +25,13 @@ export class CreateWithdrawalDto {
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty({ message: 'Account name is required' })
+  @IsNotEmpty({ message: "Account name is required" })
   @MaxLength(100)
   accountName!: string;
 
   @ApiProperty()
   @IsString()
-  @IsNotEmpty({ message: 'Account number is required' })
+  @IsNotEmpty({ message: "Account number is required" })
   @MaxLength(50)
   accountNumber!: string;
 

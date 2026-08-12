@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "src/prisma/prisma.service";
 
 @Injectable()
 export class CitiesService {
@@ -7,7 +7,7 @@ export class CitiesService {
 
   async getAll() {
     return this.prisma.city.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
   }
 
@@ -17,7 +17,7 @@ export class CitiesService {
     });
 
     if (!city) {
-      throw new NotFoundException('City not found');
+      throw new NotFoundException("City not found");
     }
 
     return city;
