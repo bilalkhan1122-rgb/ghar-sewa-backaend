@@ -194,7 +194,7 @@ export class ChatService {
 
     // Real-time broadcast (also delivered to the other party's personal room)
     this.gateway.emitNewMessage(conversationId, message, conversation, userId);
-    this.notifyNewMessage(conversation, userId, lastMessage, message);
+    await this.notifyNewMessage(conversation, userId, lastMessage, message);
 
     this.logger.log({
       message: "Message sent",
@@ -244,7 +244,7 @@ export class ChatService {
     });
 
     this.gateway.emitNewMessage(conversationId, message, conversation, userId);
-    this.notifyNewMessage(conversation, userId, lastMessage, message);
+    await this.notifyNewMessage(conversation, userId, lastMessage, message);
 
     return message;
   }
@@ -436,7 +436,7 @@ export class ChatService {
       conversation.customerId === userId
         ? conversation.providerId
         : conversation.customerId;
-    void this.realtime.publish(
+    await this.realtime.publish(
       PUSHER_CHANNELS.user(otherPartyId),
       PUSHER_EVENTS.CHAT_MESSAGE_READ,
       { conversationId, userId, readAt: readAt.toISOString() },
@@ -641,7 +641,7 @@ export class ChatService {
    * skipped for the sender. The NEW_MESSAGE type maps to the CHAT category,
    * which respects the user's existing chatEnabled preference.
    */
-  private notifyNewMessage(
+  private async notifyNewMessage(
     conversation: { id: string; customerId: string; providerId: string },
     senderId: string,
     preview: string,
@@ -652,24 +652,37 @@ export class ChatService {
         ? conversation.providerId
         : conversation.customerId;
 
-    void this.notifications.send({
-      userId: recipientId,
-      type: NotificationType.NEW_MESSAGE,
-      title: "New message",
-      message: preview || "You have a new message",
-      relatedEntityType: "CONVERSATION",
-      relatedEntityId: conversation.id,
-    });
-
-    // Live delivery to the open thread. Pusher rather than the Socket.IO
-    // gateway because the deployment is serverless: a function cannot hold a
-    // WebSocket open, so the gateway never runs in production.
-    if (message) {
-      void this.realtime.publish(
-        PUSHER_CHANNELS.user(recipientId),
-        PUSHER_EVENTS.CHAT_MESSAGE_NEW,
-        { conversationId: conversation.id, message },
-      );
+    // Awaited, not fire-and-forget: on Vercel the function is frozen as soon
+    // as the response is sent, so a promise left running here is simply never
+    // completed and the message is never delivered. Failures are swallowed —
+    // the message is already committed and must not fail on a delivery error.
+    try {
+      await Promise.all([
+        this.notifications.send({
+          userId: recipientId,
+          type: NotificationType.NEW_MESSAGE,
+          title: "New message",
+          message: preview || "You have a new message",
+          relatedEntityType: "CONVERSATION",
+          relatedEntityId: conversation.id,
+        }),
+        // Live delivery to the open thread. Pusher rather than the Socket.IO
+        // gateway because the deployment is serverless: a function cannot hold
+        // a WebSocket open, so the gateway never runs in production.
+        message
+          ? this.realtime.publish(
+              PUSHER_CHANNELS.user(recipientId),
+              PUSHER_EVENTS.CHAT_MESSAGE_NEW,
+              { conversationId: conversation.id, message },
+            )
+          : Promise.resolve(),
+      ]);
+    } catch (error) {
+      this.logger.warn({
+        message: "Message delivery notification failed",
+        conversationId: conversation.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
