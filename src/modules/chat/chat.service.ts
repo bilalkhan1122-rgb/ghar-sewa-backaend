@@ -10,7 +10,10 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { FileUploadService } from "src/common/services/file-upload.service";
 import { ChatGateway } from "./chat.gateway";
 import { NotificationsService } from "src/modules/notifications/notifications.service";
-import { RealtimeService, PUSHER_EVENTS } from "src/modules/realtime/realtime.service";
+import {
+  RealtimeService,
+  PUSHER_EVENTS,
+} from "src/modules/realtime/realtime.service";
 import { PUSHER_CHANNELS } from "src/modules/realtime/realtime-channels";
 import { CreateConversationDto } from "./dtos/create-conversation.dto";
 import { SendMessageDto, ChatMessageType } from "./dtos/send-message.dto";

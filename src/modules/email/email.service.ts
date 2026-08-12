@@ -2,6 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Resend } from "resend";
 
+import { keepAlive } from "src/common/utils/keep-alive";
+
 /**
  * Transactional email delivery backed by Resend (https://resend.com).
  *
@@ -39,7 +41,18 @@ export class EmailService {
    * Core send. Never throws — delivery problems are logged so the request
    * flow (signup, reset request, ...) is never blocked by email hiccups.
    */
-  async sendEmail(to: string, subject: string, html: string): Promise<void> {
+  sendEmail(to: string, subject: string, html: string): Promise<void> {
+    // Password-reset and verification mails are sent without awaiting, so the
+    // request does not wait on Resend. On Vercel that promise only survives
+    // because of keepAlive.
+    return keepAlive(this.deliver(to, subject, html));
+  }
+
+  private async deliver(
+    to: string,
+    subject: string,
+    html: string,
+  ): Promise<void> {
     if (!this.resend) {
       this.logger.log(
         `[EMAIL-STUB] to=${to} subject="${subject}"`,

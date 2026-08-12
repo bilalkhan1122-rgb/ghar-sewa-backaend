@@ -13,6 +13,7 @@ import {
   NotificationDeliveryStatus,
 } from "generated/prisma/client";
 
+import { keepAlive } from "src/common/utils/keep-alive";
 export interface SendNotificationInput {
   userId: string;
   type: NotificationType;
@@ -122,7 +123,14 @@ export class NotificationsService {
    * registered devices. Respects user preferences unless `force` is set.
    * Never throws — callers (other modules) treat it as fire-and-forget.
    */
-  async send(input: SendNotificationInput) {
+  send(input: SendNotificationInput) {
+    // Almost every caller does `void this.notifications.send(...)`. keepAlive
+    // is what makes that survive on Vercel, where the function is frozen as
+    // soon as the response goes out.
+    return keepAlive(this.doSend(input));
+  }
+
+  private async doSend(input: SendNotificationInput) {
     try {
       const category = TYPE_TO_CATEGORY[input.type];
 

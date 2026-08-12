@@ -6,6 +6,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import Pusher from "pusher";
 import { PUSHER_CHANNELS } from "./realtime-channels";
+import { keepAlive } from "src/common/utils/keep-alive";
 
 /** Realtime event names used across Modules 19-21. */
 export const PUSHER_EVENTS = {
@@ -75,7 +76,13 @@ export class RealtimeService {
    * Publish an event to a channel. Fire-and-forget and never throws: returns
    * true when delivered, false when stubbed or failed (failure is logged).
    */
-  async publish(
+  publish(channel: string, event: string, data: unknown): Promise<boolean> {
+    // Callers publish fire-and-forget; keepAlive stops Vercel from freezing
+    // the function before the event actually leaves.
+    return keepAlive(this.doPublish(channel, event, data));
+  }
+
+  private async doPublish(
     channel: string,
     event: string,
     data: unknown,
