@@ -166,8 +166,12 @@ export class CategoriesService {
         user: {
           role: "PROVIDER" as const,
           isActive: true,
-          status: "ACTIVE" as const,
-          verificationStatus: "APPROVED" as const,
+          status: 'ACTIVE' as const,
+          verificationStatus: 'APPROVED' as const,
+          // Matches what booking requires. Without it a provider who has not
+          // finished their profile is listed — with a blank rate — and the
+          // customer only discovers they cannot be booked at the last step.
+          profileCompleted: true,
         },
       },
     };
@@ -466,7 +470,8 @@ export class CategoriesService {
             provider: {
               user: {
                 isActive: true,
-                verificationStatus: "APPROVED",
+                verificationStatus: 'APPROVED',
+                profileCompleted: true,
               },
             },
           },

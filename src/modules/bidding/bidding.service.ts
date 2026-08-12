@@ -521,6 +521,10 @@ export class BiddingService {
             id: true,
             status: true,
             offeredPrice: true,
+            // Without these the feed knows a bid was COUNTERED but not for how
+            // much, so the provider is asked to accept an amount it cannot show.
+            counterPrice: true,
+            counterMessage: true,
           },
         },
       },
