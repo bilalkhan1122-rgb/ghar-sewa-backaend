@@ -10,6 +10,8 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { FileUploadService } from "src/common/services/file-upload.service";
 import { ChatGateway } from "./chat.gateway";
 import { NotificationsService } from "src/modules/notifications/notifications.service";
+import { RealtimeService, PUSHER_EVENTS } from "src/modules/realtime/realtime.service";
+import { PUSHER_CHANNELS } from "src/modules/realtime/realtime-channels";
 import { CreateConversationDto } from "./dtos/create-conversation.dto";
 import { SendMessageDto, ChatMessageType } from "./dtos/send-message.dto";
 import { UpdateMessageDto } from "./dtos/update-message.dto";
@@ -43,6 +45,7 @@ export class ChatService {
     private readonly gateway: ChatGateway,
     private readonly logger: Logger,
     private readonly notifications: NotificationsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   // ─── Create / Retrieve Conversation ──────────────────────────────────
@@ -191,7 +194,7 @@ export class ChatService {
 
     // Real-time broadcast (also delivered to the other party's personal room)
     this.gateway.emitNewMessage(conversationId, message, conversation, userId);
-    this.notifyNewMessage(conversation, userId, lastMessage);
+    this.notifyNewMessage(conversation, userId, lastMessage, message);
 
     this.logger.log({
       message: "Message sent",
@@ -241,7 +244,7 @@ export class ChatService {
     });
 
     this.gateway.emitNewMessage(conversationId, message, conversation, userId);
-    this.notifyNewMessage(conversation, userId, lastMessage);
+    this.notifyNewMessage(conversation, userId, lastMessage, message);
 
     return message;
   }
@@ -630,6 +633,7 @@ export class ChatService {
     conversation: { id: string; customerId: string; providerId: string },
     senderId: string,
     preview: string,
+    message?: unknown,
   ) {
     const recipientId =
       conversation.customerId === senderId
@@ -644,6 +648,17 @@ export class ChatService {
       relatedEntityType: "CONVERSATION",
       relatedEntityId: conversation.id,
     });
+
+    // Live delivery to the open thread. Pusher rather than the Socket.IO
+    // gateway because the deployment is serverless: a function cannot hold a
+    // WebSocket open, so the gateway never runs in production.
+    if (message) {
+      void this.realtime.publish(
+        PUSHER_CHANNELS.user(recipientId),
+        PUSHER_EVENTS.CHAT_MESSAGE_NEW,
+        { conversationId: conversation.id, message },
+      );
+    }
   }
 
   private messagePreview(message: {

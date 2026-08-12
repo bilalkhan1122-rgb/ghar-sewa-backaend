@@ -9,6 +9,8 @@ import { PUSHER_CHANNELS } from "./realtime-channels";
 
 /** Realtime event names used across Modules 19-21. */
 export const PUSHER_EVENTS = {
+  /** A new chat message, delivered to the recipient's private user channel. */
+  CHAT_MESSAGE_NEW: "chat.message.new",
   PROVIDER_RANK_UPDATED: "provider.rank.updated",
   JOB_URGENT_CREATED: "job.urgent.created",
   JOB_URGENT_EXPIRED: "job.urgent.expired",

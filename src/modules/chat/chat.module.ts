@@ -4,10 +4,11 @@ import { ChatGateway } from "./chat.gateway";
 import { ChatController } from "./chat.controller";
 import { PrismaModule } from "src/prisma/prisma.module";
 import { NotificationsModule } from "src/modules/notifications/notifications.module";
+import { RealtimeModule } from "src/modules/realtime/realtime.module";
 import { FileUploadService } from "src/common/services/file-upload.service";
 
 @Module({
-  imports: [PrismaModule, NotificationsModule],
+  imports: [PrismaModule, NotificationsModule, RealtimeModule],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway, FileUploadService],
   exports: [ChatService],
