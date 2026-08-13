@@ -729,9 +729,12 @@ model VerificationRequest {
   id              String             @id @default(uuid())
   providerId      String
   cnicNumber      String             @db.VarChar(20)
-  facePhoto       String             @db.VarChar(500)
-  cnicFrontImage  String             @db.VarChar(500)
-  cnicBackImage   String             @db.VarChar(500)
+  // Nullable so an admin can take down an abusive or illegal upload without
+  // destroying the request itself: the decision, its timestamps and the
+  // reviewer stay on the record, only the image is purged.
+  facePhoto       String?            @db.VarChar(500)
+  cnicFrontImage  String?            @db.VarChar(500)
+  cnicBackImage   String?            @db.VarChar(500)
   status          VerificationStatus @default(PENDING)
   submittedAt     DateTime           @default(now())
   reviewedAt      DateTime?

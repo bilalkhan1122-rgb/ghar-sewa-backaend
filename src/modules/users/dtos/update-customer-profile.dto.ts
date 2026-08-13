@@ -1,5 +1,6 @@
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { IsPakistaniPhone } from "src/common/validators/phone.validator";
 
 export class UpdateCustomerProfileDto {
   @ApiPropertyOptional({
@@ -13,6 +14,17 @@ export class UpdateCustomerProfileDto {
   @MinLength(2)
   @MaxLength(100)
   fullName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Phone number. Google sign-up accounts start without one, and this is " +
+      "where they set it — the number is also a login identifier, so it must " +
+      "be unique across accounts.",
+    example: "+923001234567",
+  })
+  @IsOptional()
+  @IsPakistaniPhone()
+  phone?: string;
 
   @ApiPropertyOptional({
     description: "ID of the city",

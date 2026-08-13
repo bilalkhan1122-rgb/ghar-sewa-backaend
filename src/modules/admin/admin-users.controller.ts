@@ -3,12 +3,17 @@ import {
   Controller,
   Get,
   Param,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Post,
   Query,
 } from "@nestjs/common";
 import { ApiTags, ApiOperation } from "@nestjs/swagger";
-import { AdminUsersService } from "./admin-users.service";
+import {
+  AdminUsersService,
+  IdentityDocumentParam,
+  type IdentityDocument,
+} from "./admin-users.service";
 import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { Permissions } from "src/common/decorators/permissions.decorator";
@@ -74,5 +79,60 @@ export class AdminUsersController {
     @Param("id", ParseUUIDPipe) id: string,
   ) {
     return this.adminUsersService.restoreUser(adminId, id);
+  }
+
+  // POST rather than DELETE for both takedowns below: they carry a required
+  // reason in the body, and a DELETE body is the one place proxies are allowed
+  // to drop the payload — which would surface as a confusing validation error.
+
+  @Permissions("users.delete")
+  @Post("/:id/profile-photo/remove")
+  @ApiOperation({ summary: "Remove a user's profile photo (reason required)" })
+  async removeProfilePhoto(
+    @GetUser("sub") adminId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ActionReasonDto,
+  ) {
+    return this.adminUsersService.removeProfilePhoto(adminId, id, dto.reason);
+  }
+
+  @Permissions("users.delete")
+  @Post("/:id/gallery/:imageId/remove")
+  @ApiOperation({
+    summary: "Remove one image from a provider's gallery (reason required)",
+  })
+  async removeGalleryImage(
+    @GetUser("sub") adminId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("imageId", ParseUUIDPipe) imageId: string,
+    @Body() dto: ActionReasonDto,
+  ) {
+    return this.adminUsersService.removeGalleryImage(
+      adminId,
+      id,
+      imageId,
+      dto.reason,
+    );
+  }
+
+  @Permissions("users.delete")
+  @Post("/:id/documents/:document/remove")
+  @ApiOperation({
+    summary:
+      "Remove an identity document — facePhoto | cnicFront | cnicBack (reason required)",
+  })
+  async removeIdentityDocument(
+    @GetUser("sub") adminId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("document", new ParseEnumPipe(IdentityDocumentParam))
+    document: IdentityDocument,
+    @Body() dto: ActionReasonDto,
+  ) {
+    return this.adminUsersService.removeIdentityDocument(
+      adminId,
+      id,
+      document,
+      dto.reason,
+    );
   }
 }

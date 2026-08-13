@@ -5,6 +5,7 @@ import { AdminService } from "./admin.service";
 import { AdminUsersService } from "./admin-users.service";
 import { AdminNotificationsService } from "./admin-notifications.service";
 import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
 import { AdminDashboardController } from "./admin-dashboard.controller";
 import { AdminReportsController } from "./admin-reports.controller";
 import { AdminSearchController } from "./admin-search.controller";
@@ -37,6 +38,7 @@ import { AdminNotificationsController } from "./admin-notifications.controller";
     AdminUsersService,
     AdminNotificationsService,
     AdminAuditService,
+    FileUploadService,
   ],
 })
 export class AdminModule {}

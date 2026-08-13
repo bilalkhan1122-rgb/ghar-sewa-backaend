@@ -7,6 +7,7 @@ import { Logger } from "nestjs-pino";
 import { PrismaService } from "src/prisma/prisma.service";
 import { AdminAuditService } from "src/common/services/admin-audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { FileUploadService } from "src/common/services/file-upload.service";
 import { AdminUserQueryDto } from "./dtos/admin-user-query.dto";
 import { AdminProviderQueryDto } from "./dtos/admin-provider-query.dto";
 import { buildDateRange } from "./dtos/date-range.dto";
@@ -25,12 +26,35 @@ import {
  * Suspension, soft-delete, restore, listing, details and performance.
  * Every mutating action writes an immutable AdminAuditLog entry.
  */
+/** Identity documents an admin may take down, keyed by their API name. */
+const IDENTITY_DOCUMENT_FIELDS = {
+  facePhoto: "facePhoto",
+  cnicFront: "cnicFrontImage",
+  cnicBack: "cnicBackImage",
+} as const;
+
+const IDENTITY_DOCUMENT_LABELS = {
+  facePhoto: "face photo",
+  cnicFront: "CNIC front image",
+  cnicBack: "CNIC back image",
+} as const;
+
+export type IdentityDocument = keyof typeof IDENTITY_DOCUMENT_FIELDS;
+
+/** The same keys as accepted path values, for ParseEnumPipe in the controller. */
+export const IdentityDocumentParam = {
+  facePhoto: "facePhoto",
+  cnicFront: "cnicFront",
+  cnicBack: "cnicBack",
+} as const;
+
 @Injectable()
 export class AdminUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AdminAuditService,
     private readonly notifications: NotificationsService,
+    private readonly fileUpload: FileUploadService,
     private readonly logger: Logger,
   ) {}
 
@@ -274,6 +298,212 @@ export class AdminUsersService {
     });
 
     return { message: "User restored", user: this.sanitize(updated) };
+  }
+
+  // ─── Profile Media Moderation ────────────────────────────────────────
+
+  /**
+   * Takes down a user's profile photo.
+   *
+   * The stored file is removed as well as the column, so a photo pulled for
+   * being abusive does not stay fetchable at its blob URL by anyone who noted
+   * it down. That makes this irreversible — the audit entry keeps the old path
+   * for the record, but the bytes are gone.
+   */
+  async removeProfilePhoto(adminId: string, userId: string, reason: string) {
+    const user = await this.getUserOrThrow(userId);
+    if (!user.profilePhoto) {
+      throw new BadRequestException("This user has no profile photo");
+    }
+
+    const previousPhoto = user.profilePhoto;
+    // Column first: if the blob delete fails, a cleared column with an orphaned
+    // file is recoverable, while a deleted file still referenced by the column
+    // shows every viewer a broken image.
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { profilePhoto: null },
+    });
+    await this.fileUpload.deleteFile(previousPhoto);
+
+    await this.audit.record({
+      adminId,
+      action: "USER_PROFILE_PHOTO_REMOVED",
+      entityType: "USER",
+      entityId: userId,
+      previousValues: { profilePhoto: previousPhoto },
+      newValues: { profilePhoto: null, reason },
+    });
+    void this.notifications.send({
+      userId,
+      type: NotificationType.SYSTEM_ANNOUNCEMENT,
+      title: "Profile photo removed",
+      message: `An administrator removed your profile photo. Reason: ${reason}`,
+      relatedEntityType: "USER",
+      relatedEntityId: userId,
+      force: true,
+    });
+    this.logger.log({
+      message: "Profile photo removed by admin",
+      adminId,
+      userId,
+      reason,
+    });
+
+    return { message: "Profile photo removed", user: this.sanitize(updated) };
+  }
+
+  /**
+   * Takes down one image from a provider's work gallery. Same irreversibility
+   * as removeProfilePhoto.
+   */
+  async removeGalleryImage(
+    adminId: string,
+    userId: string,
+    imageId: string,
+    reason: string,
+  ) {
+    await this.getUserOrThrow(userId);
+
+    const image = await this.prisma.galleryImage.findUnique({
+      where: { id: imageId },
+    });
+    // Checked against the user in the path rather than trusting the image id
+    // alone, so a mistyped id cannot delete some other provider's image.
+    if (!image || image.providerId !== userId) {
+      throw new NotFoundException("Gallery image not found for this user");
+    }
+
+    await this.prisma.galleryImage.delete({ where: { id: imageId } });
+    await this.fileUpload.deleteFile(image.imageUrl);
+
+    await this.audit.record({
+      adminId,
+      action: "USER_GALLERY_IMAGE_REMOVED",
+      entityType: "USER",
+      entityId: userId,
+      previousValues: { imageId, imageUrl: image.imageUrl },
+      newValues: { reason },
+    });
+    void this.notifications.send({
+      userId,
+      type: NotificationType.SYSTEM_ANNOUNCEMENT,
+      title: "Gallery image removed",
+      message: `An administrator removed one of your gallery images. Reason: ${reason}`,
+      relatedEntityType: "USER",
+      relatedEntityId: userId,
+      force: true,
+    });
+    this.logger.log({
+      message: "Gallery image removed by admin",
+      adminId,
+      userId,
+      imageId,
+      reason,
+    });
+
+    return { message: "Gallery image removed", imageId };
+  }
+
+  /**
+   * Takes down one identity document (face photo or a CNIC side).
+   *
+   * Unlike the profile photo, each of these URLs is stored twice: once on the
+   * ProviderProfile and again on every VerificationRequest that copied it at
+   * submission time. Clearing only one side would leave the file still
+   * reachable through the other, so every reference is cleared and each
+   * distinct URL is deleted exactly once.
+   *
+   * The requests themselves are kept — status, reviewer and timestamps remain
+   * auditable; only the image is purged. Verification status is deliberately
+   * left alone: use Ban provider if the account should also lose access.
+   */
+  async removeIdentityDocument(
+    adminId: string,
+    userId: string,
+    document: IdentityDocument,
+    reason: string,
+  ) {
+    await this.getUserOrThrow(userId);
+
+    const field = IDENTITY_DOCUMENT_FIELDS[document];
+    const profile = await this.prisma.providerProfile.findUnique({
+      where: { userId },
+      select: { facePhoto: true, cnicFrontImage: true, cnicBackImage: true },
+    });
+    if (!profile) {
+      throw new NotFoundException("Provider profile not found");
+    }
+
+    const requests = await this.prisma.verificationRequest.findMany({
+      where: { providerId: userId, NOT: { [field]: null } },
+      select: { id: true, [field]: true },
+    });
+
+    // A Set because the profile and every request normally hold the same URL —
+    // deleting it once is enough, and a second delete would only log a miss.
+    const urls = new Set<string>();
+    if (profile[field]) urls.add(profile[field]);
+    for (const request of requests) {
+      const url = (request as Record<string, unknown>)[field];
+      if (typeof url === "string" && url) urls.add(url);
+    }
+
+    if (urls.size === 0) {
+      throw new BadRequestException(
+        `This user has no ${IDENTITY_DOCUMENT_LABELS[document]} on file`,
+      );
+    }
+
+    await this.prisma.providerProfile.update({
+      where: { userId },
+      data: { [field]: null },
+    });
+    if (requests.length > 0) {
+      await this.prisma.verificationRequest.updateMany({
+        where: { id: { in: requests.map((r) => r.id) } },
+        data: { [field]: null },
+      });
+    }
+    for (const url of urls) {
+      await this.fileUpload.deleteFile(url);
+    }
+
+    await this.audit.record({
+      adminId,
+      action: "USER_IDENTITY_DOCUMENT_REMOVED",
+      entityType: "USER",
+      entityId: userId,
+      previousValues: {
+        document: field,
+        urls: [...urls],
+        verificationRequestIds: requests.map((r) => r.id),
+      },
+      newValues: { [field]: null, reason },
+    });
+    void this.notifications.send({
+      userId,
+      type: NotificationType.SYSTEM_ANNOUNCEMENT,
+      title: "Identity document removed",
+      message: `An administrator removed your ${IDENTITY_DOCUMENT_LABELS[document]}. Reason: ${reason}`,
+      relatedEntityType: "USER",
+      relatedEntityId: userId,
+      force: true,
+    });
+    this.logger.log({
+      message: "Identity document removed by admin",
+      adminId,
+      userId,
+      document: field,
+      filesDeleted: urls.size,
+      reason,
+    });
+
+    return {
+      message: `${IDENTITY_DOCUMENT_LABELS[document]} removed`,
+      document,
+      filesDeleted: urls.size,
+    };
   }
 
   // ─── Provider Management ─────────────────────────────────────────────

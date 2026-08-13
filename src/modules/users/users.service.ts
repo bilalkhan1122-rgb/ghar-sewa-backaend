@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   ForbiddenException,
 } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
@@ -38,6 +39,13 @@ export class UsersService {
     userId: string,
     updateProfileDto: UpdateCustomerProfileDto,
   ) {
+    const current = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!current) {
+      throw new NotFoundException("User not found");
+    }
+
     // Validate city if provided
     if (updateProfileDto.cityId) {
       const city = await this.prisma.city.findUnique({
@@ -48,11 +56,32 @@ export class UsersService {
       }
     }
 
+    // Phone doubles as a login identifier, so it has to stay unique. Claiming
+    // one already in use would otherwise fail as an opaque Prisma P2002.
+    if (updateProfileDto.phone && updateProfileDto.phone !== current.phone) {
+      const existingPhone = await this.prisma.user.findUnique({
+        where: { phone: updateProfileDto.phone },
+      });
+      if (existingPhone) {
+        throw new ConflictException("Phone already exists");
+      }
+    }
+
+    // Google sign-ups land with no phone and no city, and providers are marked
+    // incomplete until both arrive. Flip the flag as soon as they do, so the
+    // app stops routing them back to the profile-completion screen.
+    const nextPhone = updateProfileDto.phone ?? current.phone;
+    const nextCityId = updateProfileDto.cityId ?? current.cityId;
+    const nowComplete = Boolean(nextPhone && nextCityId);
+
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...(updateProfileDto.fullName !== undefined && {
           fullName: updateProfileDto.fullName,
+        }),
+        ...(updateProfileDto.phone !== undefined && {
+          phone: updateProfileDto.phone,
         }),
         ...(updateProfileDto.cityId !== undefined && {
           cityId: updateProfileDto.cityId,
@@ -60,6 +89,9 @@ export class UsersService {
         ...(updateProfileDto.address !== undefined && {
           address: updateProfileDto.address,
         }),
+        ...(!current.profileCompleted && nowComplete
+          ? { profileCompleted: true }
+          : {}),
       },
       include: { city: true },
     });
