@@ -5,10 +5,12 @@ import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "generated/prisma/client";
 import { BookingQueryDto } from "./dtos/booking-query.dto";
+import { Permissions } from "src/common/decorators/permissions.decorator";
 
 @ApiTags("Bookings (Admin)")
 @Controller("admin/bookings")
 @Roles(UserRole.ADMIN)
+@Permissions("jobs.view")
 export class AdminBookingsController {
   constructor(private readonly bookingService: BookingService) {}
 

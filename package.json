@@ -25,6 +25,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "admin:create": "ts-node scripts/create-super-admin.ts",
     "prisma:studio": "prisma studio",
     "prisma:reset": "prisma migrate reset --force"
   },

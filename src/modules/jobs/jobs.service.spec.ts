@@ -6,6 +6,7 @@ import { AdminAuditService } from "src/common/services/admin-audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { WalletService } from "../wallet/wallet.service";
 import { JobsService } from "./jobs.service";
 import { NotificationType } from "generated/prisma/client";
 
@@ -52,6 +53,9 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
     publishUrgentJobExpired: jest.fn().mockResolvedValue(true),
   };
   const logger = { log: jest.fn(), error: jest.fn(), warn: jest.fn() };
+  // Resolves by default: the affordability rule has its own coverage, and every
+  // other test here would otherwise have to fund a wallet first.
+  const wallet = { assertCanAfford: jest.fn().mockResolvedValue(undefined) };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -65,6 +69,7 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
         { provide: PenaltiesService, useValue: penalties },
         { provide: AdminAuditService, useValue: adminAudit },
         { provide: RealtimeService, useValue: realtime },
+        { provide: WalletService, useValue: wallet },
       ],
     }).compile();
     service = module.get<JobsService>(JobsService);

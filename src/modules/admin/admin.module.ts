@@ -3,6 +3,7 @@ import { PrismaModule } from "src/prisma/prisma.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { AdminService } from "./admin.service";
 import { AdminUsersService } from "./admin-users.service";
+import { AdminAccountsService } from "./admin-accounts.service";
 import { AdminNotificationsService } from "./admin-notifications.service";
 import { AdminAuditService } from "src/common/services/admin-audit.service";
 import { FileUploadService } from "src/common/services/file-upload.service";
@@ -11,6 +12,7 @@ import { AdminReportsController } from "./admin-reports.controller";
 import { AdminSearchController } from "./admin-search.controller";
 import { AdminAuditController } from "./admin-audit.controller";
 import { AdminUsersController } from "./admin-users.controller";
+import { AdminAccountsController } from "./admin-accounts.controller";
 import { AdminProvidersController } from "./admin-providers.controller";
 import { AdminNotificationsController } from "./admin-notifications.controller";
 
@@ -30,12 +32,14 @@ import { AdminNotificationsController } from "./admin-notifications.controller";
     AdminSearchController,
     AdminAuditController,
     AdminUsersController,
+    AdminAccountsController,
     AdminProvidersController,
     AdminNotificationsController,
   ],
   providers: [
     AdminService,
     AdminUsersService,
+    AdminAccountsService,
     AdminNotificationsService,
     AdminAuditService,
     FileUploadService,

@@ -186,6 +186,7 @@ export class ProviderJobsController {
 @ApiTags("Jobs (Admin)")
 @Controller("admin/jobs")
 @Roles(UserRole.ADMIN)
+@Permissions("jobs.view")
 export class AdminJobsController {
   constructor(private readonly jobsService: JobsService) {}
 

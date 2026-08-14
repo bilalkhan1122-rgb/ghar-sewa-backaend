@@ -4,10 +4,12 @@ import { AdminAuditService } from "src/common/services/admin-audit.service";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "generated/prisma/client";
 import { AdminAuditQueryDto } from "./dtos/admin-audit-query.dto";
+import { Permissions } from "src/common/decorators/permissions.decorator";
 
 @ApiTags("Admin Audit Logs")
 @Controller("admin/audit-logs")
 @Roles(UserRole.ADMIN)
+@Permissions("admins.view")
 export class AdminAuditController {
   constructor(private readonly auditService: AdminAuditService) {}
 

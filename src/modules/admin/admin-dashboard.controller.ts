@@ -4,10 +4,12 @@ import { AdminService } from "./admin.service";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "generated/prisma/client";
 import { DateRangeDto } from "./dtos/date-range.dto";
+import { Permissions } from "src/common/decorators/permissions.decorator";
 
 @ApiTags("Admin Dashboard")
 @Controller("admin/dashboard")
 @Roles(UserRole.ADMIN)
+@Permissions("overview.view")
 export class AdminDashboardController {
   constructor(private readonly adminService: AdminService) {}
 

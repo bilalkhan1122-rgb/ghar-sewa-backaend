@@ -14,6 +14,7 @@ import {
 @ApiTags("Admin Notifications")
 @Controller("admin/notifications")
 @Roles(UserRole.ADMIN)
+@Permissions("notifications.view")
 export class AdminNotificationsController {
   constructor(
     private readonly adminNotificationsService: AdminNotificationsService,

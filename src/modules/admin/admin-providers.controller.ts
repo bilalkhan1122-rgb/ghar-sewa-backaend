@@ -19,6 +19,7 @@ import { ActionReasonDto } from "src/common/dtos/action-reason.dto";
 @ApiTags("Admin Providers")
 @Controller("admin/providers")
 @Roles(UserRole.ADMIN)
+@Permissions("providers.view")
 export class AdminProvidersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
 

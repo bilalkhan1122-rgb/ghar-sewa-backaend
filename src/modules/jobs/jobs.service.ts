@@ -24,6 +24,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { WalletService } from "../wallet/wallet.service";
 
 // Module 20: urgent jobs expire in 6 hours, normal jobs in 24. The expiry
 // is always computed server-side — the client can never submit one.
@@ -41,6 +42,7 @@ export class JobsService {
     private readonly penalties: PenaltiesService,
     private readonly adminAudit: AdminAuditService,
     private readonly realtime: RealtimeService,
+    private readonly wallet: WalletService,
   ) {}
 
   // ─── Helpers ─────────────────────────────────────────────────────────
@@ -90,6 +92,10 @@ export class JobsService {
     if (!category || !category.isActive) {
       throw new BadRequestException("Invalid or inactive category");
     }
+
+    // A job priced above the customer's balance is refused here as well as in
+    // the app: the client-side check is a courtesy, this is the rule.
+    await this.wallet.assertCanAfford(userId, dto.offeredPrice);
 
     const job = await this.prisma.job.create({
       data: {
@@ -538,6 +544,26 @@ export class JobsService {
         in: categoryId ? [categoryId] : providerCategoryIds,
       },
       expiresAt: { gt: new Date() },
+      // A direct booking creates its job as PENDING too, so without this the
+      // job the customer offered to one specific provider also sat in every
+      // other matching provider's open feed — where any of them could accept
+      // or counter-offer a job that was already spoken for.
+      //
+      // CANCELLED and DISPUTED are absent on purpose: a declined direct
+      // booking is cancelled, and the job should then return to the feed,
+      // which is exactly what the provider's decline screen promises.
+      bookings: {
+        none: {
+          status: {
+            in: [
+              BookingStatus.PENDING,
+              BookingStatus.ACCEPTED,
+              BookingStatus.IN_PROGRESS,
+              BookingStatus.COMPLETED,
+            ],
+          },
+        },
+      },
       ...(minPrice !== undefined && {
         offeredPrice: { gte: minPrice },
       }),

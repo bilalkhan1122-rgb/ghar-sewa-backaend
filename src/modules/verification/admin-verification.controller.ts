@@ -20,6 +20,7 @@ import { RejectVerificationDto } from "./dtos/reject-verification.dto";
 @ApiTags("Verification (Admin)")
 @Controller("admin/verification")
 @Roles(UserRole.ADMIN)
+@Permissions("verification.view")
 export class AdminVerificationController {
   constructor(
     private readonly verificationService: VerificationService,

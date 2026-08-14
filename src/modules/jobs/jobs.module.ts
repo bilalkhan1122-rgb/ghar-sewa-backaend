@@ -11,9 +11,16 @@ import { AdminAuditService } from "src/common/services/admin-audit.service";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PenaltiesModule } from "../penalties/penalties.module";
 import { RealtimeModule } from "../realtime/realtime.module";
+import { WalletModule } from "../wallet/wallet.module";
 
 @Module({
-  imports: [PrismaModule, NotificationsModule, PenaltiesModule, RealtimeModule],
+  imports: [
+    PrismaModule,
+    NotificationsModule,
+    PenaltiesModule,
+    RealtimeModule,
+    WalletModule,
+  ],
   controllers: [JobsController, ProviderJobsController, AdminJobsController],
   providers: [JobsService, FileUploadService, AdminAuditService],
   exports: [JobsService],

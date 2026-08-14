@@ -4,10 +4,12 @@ import { AdminService } from "./admin.service";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "generated/prisma/client";
 import { AdminSearchQueryDto } from "./dtos/admin-search-query.dto";
+import { Permissions } from "src/common/decorators/permissions.decorator";
 
 @ApiTags("Admin Search")
 @Controller("admin/search")
 @Roles(UserRole.ADMIN)
+@Permissions("overview.view")
 export class AdminSearchController {
   constructor(private readonly adminService: AdminService) {}
 

@@ -21,6 +21,7 @@ import { RankingQueryDto } from "./dtos/ranking-query.dto";
 @ApiTags("Admin Rankings")
 @Controller("admin/rankings")
 @Roles(UserRole.ADMIN)
+@Permissions("providers.view")
 export class AdminRankingsController {
   constructor(private readonly rankingService: RankingService) {}
 

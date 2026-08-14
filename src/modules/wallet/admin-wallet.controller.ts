@@ -30,6 +30,7 @@ import { FreezeWalletDto, UnfreezeWalletDto } from "./dtos/freeze-wallet.dto";
 @ApiTags("Wallet (Admin)")
 @Controller("admin/wallet")
 @Roles(UserRole.ADMIN)
+@Permissions("wallet.view")
 export class AdminWalletController {
   constructor(
     private readonly walletService: WalletService,

@@ -10,7 +10,13 @@ import { UpdateCategoryDto } from "./dtos/update-category.dto";
 import { CategoryQueryDto, CategorySortField } from "./dtos/category-query.dto";
 import { ReorderCategoriesDto } from "./dtos/reorder-categories.dto";
 import { Logger } from "nestjs-pino";
-import { Prisma, ProviderRank } from "generated/prisma/client";
+import {
+  Prisma,
+  ProviderRank,
+  UserRole,
+  UserStatus,
+  VerificationStatus,
+} from "generated/prisma/client";
 
 @Injectable()
 export class CategoriesService {
@@ -84,10 +90,36 @@ export class CategoriesService {
       this.prisma.serviceCategory.count({ where }),
     ]);
 
+    // Provider counts for the badges on the app's service grid. Counted with
+    // the same filter the browse list uses (approved, active, complete) so the
+    // badge never promises providers the customer cannot actually book.
+    const providerCounts = await this.prisma.providerServiceCategory.groupBy({
+      by: ["categoryId"],
+      where: {
+        categoryId: { in: categories.map((c) => c.id) },
+        provider: {
+          user: {
+            role: UserRole.PROVIDER,
+            isActive: true,
+            status: UserStatus.ACTIVE,
+            verificationStatus: VerificationStatus.APPROVED,
+            profileCompleted: true,
+          },
+        },
+      },
+      _count: { providerId: true },
+    });
+    const countByCategory = new Map(
+      providerCounts.map((row) => [row.categoryId, row._count.providerId]),
+    );
+
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data: categories,
+      data: categories.map((category) => ({
+        ...category,
+        providerCount: countByCategory.get(category.id) ?? 0,
+      })),
       meta: {
         total,
         page,

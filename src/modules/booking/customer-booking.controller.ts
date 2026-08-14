@@ -75,6 +75,29 @@ export class CustomerBookingController {
     return this.bookingService.getJobTimeline(userId, jobId);
   }
 
+  @Post("/:bookingId/counter/accept")
+  @ApiOperation({
+    summary: "Accept the provider's counter-offer on a direct booking",
+  })
+  async acceptCounter(
+    @GetUser("sub") userId: string,
+    @Param("bookingId", ParseUUIDPipe) bookingId: string,
+  ) {
+    return this.bookingService.acceptBookingCounter(userId, bookingId);
+  }
+
+  @Post("/:bookingId/counter/decline")
+  @ApiOperation({
+    summary:
+      "Decline the counter-offer and keep the original price on the booking",
+  })
+  async declineCounter(
+    @GetUser("sub") userId: string,
+    @Param("bookingId", ParseUUIDPipe) bookingId: string,
+  ) {
+    return this.bookingService.declineBookingCounter(userId, bookingId);
+  }
+
   @Post("/:bookingId/confirm-completion")
   @ApiOperation({ summary: "Confirm job completion" })
   async confirmCompletion(

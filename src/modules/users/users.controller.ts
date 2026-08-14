@@ -23,6 +23,7 @@ import { UserRole } from "generated/prisma/enums";
 import { UpdateUserDto } from "./dtos/update-user.dto";
 import { UpdateCustomerProfileDto } from "./dtos/update-customer-profile.dto";
 import { PaginationDto } from "src/common/dtos/pagination.dto";
+import { Permissions } from "src/common/decorators/permissions.decorator";
 
 @ApiTags("Users")
 @Controller("users")
@@ -100,6 +101,7 @@ export class UsersController {
   // ─── Admin Routes ────────────────────────────────────────────────────
 
   @Roles(UserRole.ADMIN)
+  @Permissions("users.view")
   @Get("/")
   async getAllUsers(@Query() paginationDto: PaginationDto) {
     const { page = 1, limit = 10 } = paginationDto;
@@ -107,12 +109,14 @@ export class UsersController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Permissions("users.view")
   @Get("/:id")
   async getUserById(@Param("id") id: string) {
     return this.usersService.getUserById(id);
   }
 
   @Roles(UserRole.ADMIN)
+  @Permissions("users.suspend")
   @Patch("/:id")
   async updateUserById(
     @Param("id") id: string,
@@ -122,6 +126,7 @@ export class UsersController {
   }
 
   @Roles(UserRole.ADMIN)
+  @Permissions("users.delete")
   @Delete("/:id")
   async deleteUserById(@Param("id") id: string) {
     return this.usersService.deleteUserById(id);

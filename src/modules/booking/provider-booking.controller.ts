@@ -13,6 +13,7 @@ import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { UserRole } from "generated/prisma/client";
 import { BookingQueryDto } from "./dtos/booking-query.dto";
+import { CounterBookingDto } from "./dtos/counter-booking.dto";
 
 @ApiTags("Booking (Provider)")
 @Controller("provider/booking")
@@ -84,6 +85,18 @@ export class ProviderBookingController {
       bookingId,
       body?.reason,
     );
+  }
+
+  @Post("/:bookingId/counter")
+  @ApiOperation({
+    summary: "Propose a different price for a direct booking request",
+  })
+  async counterRequest(
+    @GetUser("sub") userId: string,
+    @Param("bookingId", ParseUUIDPipe) bookingId: string,
+    @Body() dto: CounterBookingDto,
+  ) {
+    return this.bookingService.counterBookingRequest(userId, bookingId, dto);
   }
 
   @Post("/:bookingId/start")

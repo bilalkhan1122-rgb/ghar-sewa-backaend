@@ -16,6 +16,7 @@ import { AnalyticsQueryDto } from "./dtos/analytics-query.dto";
 @ApiTags("Admin Analytics")
 @Controller("admin/analytics")
 @Roles(UserRole.ADMIN)
+@Permissions("analytics.view")
 export class AnalyticsController {
   constructor(
     private readonly analyticsService: AnalyticsService,

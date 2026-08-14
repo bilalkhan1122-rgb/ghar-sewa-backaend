@@ -20,6 +20,7 @@ import { Roles } from "src/common/decorators/roles.decorator";
 import { Public } from "src/common/decorators/public.decorator";
 import { UserRole } from "generated/prisma/client";
 import { PaginationDto } from "src/common/dtos/pagination.dto";
+import { Permissions } from "src/common/decorators/permissions.decorator";
 
 // ─── Customer / Public Controller ──────────────────────────────────────
 
@@ -110,6 +111,7 @@ export class ProviderCategoriesController {
 @ApiTags("Admin Categories")
 @Controller("admin/categories")
 @Roles(UserRole.ADMIN)
+@Permissions("categories.view")
 export class AdminCategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
@@ -119,12 +121,14 @@ export class AdminCategoriesController {
     return this.categoriesService.adminListCategories(query);
   }
 
+  @Permissions("categories.manage")
   @Post("/")
   @ApiOperation({ summary: "Create a new category" })
   async createCategory(@Body() dto: CreateCategoryDto) {
     return this.categoriesService.createCategory(dto);
   }
 
+  @Permissions("categories.manage")
   @Patch("/:id")
   @ApiOperation({ summary: "Update a category" })
   async updateCategory(
@@ -134,18 +138,21 @@ export class AdminCategoriesController {
     return this.categoriesService.updateCategory(id, dto);
   }
 
+  @Permissions("categories.manage")
   @Delete("/:id")
   @ApiOperation({ summary: "Soft delete a category" })
   async deleteCategory(@Param("id", ParseUUIDPipe) id: string) {
     return this.categoriesService.deleteCategory(id);
   }
 
+  @Permissions("categories.manage")
   @Patch("/:id/status")
   @ApiOperation({ summary: "Activate or deactivate a category" })
   async toggleCategoryStatus(@Param("id", ParseUUIDPipe) id: string) {
     return this.categoriesService.toggleCategoryStatus(id);
   }
 
+  @Permissions("categories.manage")
   @Post("/reorder")
   @ApiOperation({ summary: "Reorder categories" })
   async reorderCategories(@Body() dto: ReorderCategoriesDto) {

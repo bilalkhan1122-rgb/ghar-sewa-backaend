@@ -7,6 +7,7 @@ import {
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "src/prisma/prisma.service";
 import { DirectBookingDto } from "./dtos/direct-booking.dto";
+import { CounterBookingDto } from "./dtos/counter-booking.dto";
 import { BookingQueryDto, BookingSortField } from "./dtos/booking-query.dto";
 import { Logger } from "nestjs-pino";
 import {
@@ -79,6 +80,10 @@ export class BookingService {
     if (!category || !category.isActive) {
       throw new BadRequestException("Invalid or inactive category");
     }
+
+    // Same rule as a posted job — a direct booking the wallet cannot cover
+    // strands the provider at payment time.
+    await this.wallet.assertCanAfford(customerId, dto.totalAmount);
 
     // Create job, booking, and timeline in transaction
     const result = await this.prisma.$transaction(async (tx) => {
@@ -243,6 +248,200 @@ export class BookingService {
    * Declines a direct booking. The job returns to the open pool rather than
    * being cancelled, so the customer can pick someone else or take bids.
    */
+  // ─── Direct-booking price negotiation ────────────────────────────────
+
+  /**
+   * Provider proposes a different price for a direct booking.
+   *
+   * Reuses the Bid table rather than adding a parallel concept: a counter is
+   * recorded as the provider's bid on the booking's job, so the price history
+   * of a job lives in one place whether it came from the open feed or a direct
+   * booking.
+   *
+   * The booking deliberately stays PENDING. That keeps the job out of the open
+   * feed (see the booking filter in the provider feed query) so nobody else can
+   * take a job that is mid-negotiation, and it leaves the provider free to
+   * accept the original price if the customer says no.
+   *
+   * One round only, matching the bid counter-offer flow: a second counter while
+   * one is outstanding is refused rather than silently replacing it.
+   */
+  async counterBookingRequest(
+    providerId: string,
+    bookingId: string,
+    dto: CounterBookingDto,
+  ) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { job: true },
+    });
+
+    if (!booking) throw new NotFoundException("Booking not found");
+    if (booking.providerId !== providerId) {
+      throw new ForbiddenException(
+        "You can only respond to your own booking requests",
+      );
+    }
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `This request is already ${booking.status.toLowerCase()}`,
+      );
+    }
+
+    const outstanding = await this.prisma.bid.findFirst({
+      where: {
+        jobId: booking.jobId,
+        providerId,
+        status: BidStatus.PENDING,
+      },
+    });
+    if (outstanding) {
+      throw new BadRequestException(
+        "You already have a counter-offer waiting on this booking",
+      );
+    }
+
+    const bid = await this.prisma.bid.create({
+      data: {
+        jobId: booking.jobId,
+        providerId,
+        offeredPrice: dto.offeredPrice,
+        message: dto.message,
+        status: BidStatus.PENDING,
+      },
+    });
+
+    void this.notifications.send({
+      userId: booking.customerId,
+      type: NotificationType.BID_COUNTERED,
+      title: "Provider proposed a different price",
+      message: `Your booking for "${booking.job.title}" was countered at Rs ${dto.offeredPrice}. Accept it or keep your original offer.`,
+      relatedEntityType: "BOOKING",
+      relatedEntityId: bookingId,
+    });
+
+    this.logger.log({
+      message: "Provider countered a direct booking",
+      bookingId,
+      providerId,
+      offeredPrice: dto.offeredPrice,
+    });
+
+    return bid;
+  }
+
+  /**
+   * Customer accepts the provider's counter-offer: the booking is confirmed at
+   * the new price.
+   *
+   * Mirrors acceptBookingRequest — same statuses, same timeline event — with
+   * the agreed amount replaced, so a booking confirmed through a negotiation is
+   * indistinguishable downstream from one accepted outright.
+   */
+  async acceptBookingCounter(customerId: string, bookingId: string) {
+    const { booking, bid } = await this.getPendingCounter(customerId, bookingId);
+
+    // The new price still has to be covered, exactly as at booking time.
+    await this.wallet.assertCanAfford(customerId, bid.offeredPrice);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: BookingStatus.ACCEPTED,
+          acceptedAt: new Date(),
+          totalAmount: bid.offeredPrice,
+        },
+      });
+      await tx.job.update({
+        where: { id: booking.jobId },
+        data: { status: JobStatus.ACCEPTED, offeredPrice: bid.offeredPrice },
+      });
+      await tx.bid.update({
+        where: { id: bid.id },
+        data: { status: BidStatus.ACCEPTED },
+      });
+      await tx.jobTimeline.create({
+        data: {
+          jobId: booking.jobId,
+          event: "PROVIDER_ASSIGNED",
+          description: "Customer accepted the provider's counter-offer",
+        },
+      });
+      return updated;
+    });
+
+    void this.notifications.send({
+      userId: booking.providerId,
+      type: NotificationType.BID_ACCEPTED,
+      title: "Counter-offer accepted 🎉",
+      message: `Your price for "${booking.job.title}" was accepted. The job is yours.`,
+      relatedEntityType: "BOOKING",
+      relatedEntityId: bookingId,
+    });
+
+    return result;
+  }
+
+  /**
+   * Customer turns the counter down. The booking stays PENDING at its original
+   * price, so the provider can still accept it or decline outright — declining
+   * a price is not the same as declining the job.
+   */
+  async declineBookingCounter(customerId: string, bookingId: string) {
+    const { booking, bid } = await this.getPendingCounter(customerId, bookingId);
+
+    await this.prisma.bid.update({
+      where: { id: bid.id },
+      data: { status: BidStatus.REJECTED },
+    });
+
+    void this.notifications.send({
+      userId: booking.providerId,
+      type: NotificationType.BID_REJECTED,
+      title: "Counter-offer declined",
+      message: `The customer kept their original price for "${booking.job.title}". You can still accept or decline the booking.`,
+      relatedEntityType: "BOOKING",
+      relatedEntityId: bookingId,
+    });
+
+    return { message: "Counter-offer declined", bookingId };
+  }
+
+  /** Shared lookup + ownership/state checks for both counter responses. */
+  private async getPendingCounter(customerId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { job: true },
+    });
+
+    if (!booking) throw new NotFoundException("Booking not found");
+    if (booking.customerId !== customerId) {
+      throw new ForbiddenException("You can only respond to your own bookings");
+    }
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `This request is already ${booking.status.toLowerCase()}`,
+      );
+    }
+
+    const bid = await this.prisma.bid.findFirst({
+      where: {
+        jobId: booking.jobId,
+        providerId: booking.providerId,
+        status: BidStatus.PENDING,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!bid) {
+      throw new BadRequestException(
+        "There is no counter-offer waiting on this booking",
+      );
+    }
+
+    return { booking, bid };
+  }
+
   async declineBookingRequest(
     providerId: string,
     bookingId: string,

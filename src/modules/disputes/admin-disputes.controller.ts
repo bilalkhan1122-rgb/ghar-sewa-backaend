@@ -22,6 +22,7 @@ import { RejectDisputeDto } from "./dtos/reject-dispute.dto";
 @ApiTags("Disputes (Admin)")
 @Controller("admin/disputes")
 @Roles(UserRole.ADMIN)
+@Permissions("disputes.view")
 export class AdminDisputesController {
   constructor(
     private readonly disputesService: DisputesService,

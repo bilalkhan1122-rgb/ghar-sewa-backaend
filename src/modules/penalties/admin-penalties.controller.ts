@@ -20,6 +20,7 @@ import { GetUser } from "src/common/decorators/get-user.decorator";
 @ApiTags("Penalties (Admin)")
 @Controller("admin")
 @Roles(UserRole.ADMIN)
+@Permissions("disputes.view")
 export class AdminPenaltiesController {
   constructor(
     private readonly penaltiesService: PenaltiesService,

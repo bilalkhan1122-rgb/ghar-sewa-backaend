@@ -135,6 +135,32 @@ export class WalletService {
     });
   }
 
+  /**
+   * Refuses a job or booking the customer's wallet cannot cover.
+   *
+   * The money is not moved or reserved here — it is still charged later in the
+   * normal flow. This only stops a job being posted at a price the customer
+   * plainly cannot pay, which otherwise stranded the provider: they accept, do
+   * the work, and the charge fails at the end.
+   *
+   * `heldBalance` is deliberately not subtracted: a customer's holds belong to
+   * jobs already in flight, and those are settled from the same balance.
+   */
+  async assertCanAfford(customerId: string, amount: Prisma.Decimal | number) {
+    const wallet = await this.ensureWallet(customerId);
+    this.assertActive(wallet);
+
+    const required = new Prisma.Decimal(amount);
+    if (wallet.balance.lessThan(required)) {
+      const shortfall = required.minus(wallet.balance);
+      throw new BadRequestException(
+        `Insufficient wallet balance. Your balance is ${wallet.balance.toFixed(2)} ` +
+          `but this job is priced at ${required.toFixed(2)}. ` +
+          `Top up at least ${shortfall.toFixed(2)} more and try again.`,
+      );
+    }
+  }
+
   private assertActive(wallet: { status: WalletStatus }) {
     if (wallet.status !== WalletStatus.ACTIVE) {
       throw new ForbiddenException(

@@ -12,6 +12,7 @@ import basicAuth from "express-basic-auth";
 import { join } from "path";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
+import { buildCorsOptions } from "src/common/cors";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -28,20 +29,7 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>("PORT");
-  // Trimmed and filtered: the env-validation schema tolerates whitespace after
-  // the commas, so a value like "http://a.com, https://b.com" passes validation
-  // but would otherwise put " https://b.com" in the allowlist, which matches no
-  // Origin header and fails CORS in a way that looks like a correct config.
-  const corsOrigins = configService
-    .get<string>("CORS_ORIGIN")
-    ?.split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
-  app.enableCors({
-    origin: corsOrigins,
-    credentials: true,
-  });
+  app.enableCors(buildCorsOptions(configService.get<string>("CORS_ORIGIN")));
 
   app.use(cookieParser());
 
