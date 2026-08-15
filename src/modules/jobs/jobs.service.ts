@@ -348,6 +348,16 @@ export class JobsService {
         include: {
           category: true,
           images: true,
+          // The customer's list shows "Completed" the moment the provider
+          // marks the work done, which is before the customer has confirmed
+          // it or the payment has been released. The list needs the booking's
+          // own state to tell those two apart.
+          bookings: {
+            where: { status: { not: BookingStatus.CANCELLED } },
+            select: { id: true, status: true, completedAt: true, confirmedAt: true },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       }),
       this.prisma.job.count({ where }),
