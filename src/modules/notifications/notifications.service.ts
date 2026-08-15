@@ -108,6 +108,19 @@ const TYPE_TO_CATEGORY: Record<NotificationType, NotificationCategory> = {
   [NotificationType.SYSTEM_ANNOUNCEMENT]: NotificationCategory.SYSTEM,
 };
 
+/**
+ * Categories kept out of the in-app notifications list and its badge.
+ *
+ * Chat messages are still stored (delivery status and history matter for
+ * support) and still pushed to the device — they just do not belong in the
+ * notifications tab, where every message showed up a second time alongside the
+ * Chat tab that already lists and badges them. An explicit `?category=CHAT`
+ * still returns them.
+ */
+const LIST_HIDDEN_CATEGORIES: NotificationCategory[] = [
+  NotificationCategory.CHAT,
+];
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -281,7 +294,10 @@ export class NotificationsService {
       userId,
       deletedAt: null,
       ...(type && { type }),
-      ...(category && { category }),
+      // An explicit category filter wins — hiding chat is the default, not a rule.
+      ...(category
+        ? { category }
+        : { category: { notIn: LIST_HIDDEN_CATEGORIES } }),
       ...(isRead !== undefined && { isRead }),
     };
 
@@ -358,7 +374,14 @@ export class NotificationsService {
 
   async unreadCount(userId: string) {
     const count = await this.prisma.notification.count({
-      where: { userId, isRead: false, deletedAt: null },
+      // Matches what `list` shows: the bell must not count messages the Chat
+      // tab's own badge already counts.
+      where: {
+        userId,
+        isRead: false,
+        deletedAt: null,
+        category: { notIn: LIST_HIDDEN_CATEGORIES },
+      },
     });
 
     return { unreadCount: count };
