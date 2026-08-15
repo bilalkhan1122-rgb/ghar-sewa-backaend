@@ -10,9 +10,10 @@ import { UpdateCategoryDto } from "./dtos/update-category.dto";
 import { CategoryQueryDto, CategorySortField } from "./dtos/category-query.dto";
 import { ReorderCategoriesDto } from "./dtos/reorder-categories.dto";
 import { Logger } from "nestjs-pino";
+import { ProviderService } from "../provider/provider.service";
+import { PublicProvidersQueryDto } from "../provider/dtos/public-providers-query.dto";
 import {
   Prisma,
-  ProviderRank,
   UserRole,
   UserStatus,
   VerificationStatus,
@@ -23,6 +24,7 @@ export class CategoriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly logger: Logger,
+    private readonly providerService: ProviderService,
   ) {}
 
   // ─── Slug Generation ─────────────────────────────────────────────────
@@ -176,12 +178,18 @@ export class CategoriesService {
 
   // ─── Providers by Category ───────────────────────────────────────────
 
+  /**
+   * Providers offering one service.
+   *
+   * The filtering, searching and sorting is the same problem as the browse-all
+   * listing, so this delegates rather than keeping a second copy of the
+   * visibility rules — the two used to drift, and a provider could appear in one
+   * listing but not the other.
+   */
   async getCategoryProviders(
     categoryId: string,
-    page: number = 1,
-    limit: number = 10,
+    query: PublicProvidersQueryDto,
   ) {
-    // Verify category exists
     const category = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },
     });
@@ -189,78 +197,7 @@ export class CategoriesService {
       throw new NotFoundException("Category not found");
     }
 
-    const skip = (page - 1) * limit;
-
-    // Only APPROVED, non-suspended providers appear in customer searches
-    const where = {
-      categoryId,
-      provider: {
-        user: {
-          role: "PROVIDER" as const,
-          isActive: true,
-          status: 'ACTIVE' as const,
-          verificationStatus: 'APPROVED' as const,
-          // Matches what booking requires. Without it a provider who has not
-          // finished their profile is listed — with a blank rate — and the
-          // customer only discovers they cannot be booked at the last step.
-          profileCompleted: true,
-        },
-      },
-    };
-
-    const [relations, total] = await Promise.all([
-      this.prisma.providerServiceCategory.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          provider: {
-            include: {
-              user: {
-                include: {
-                  city: true,
-                  ratingSummary: true,
-                  // Module 19: rank badge for customer-facing listings
-                  providerRanking: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { provider: { user: { fullName: "asc" } } },
-      }),
-      this.prisma.providerServiceCategory.count({ where }),
-    ]);
-
-    const providers = relations.map((r) => ({
-      id: r.provider.user.id,
-      fullName: r.provider.user.fullName,
-      profilePhoto: r.provider.user.profilePhoto,
-      bio: r.provider.bio,
-      hourlyRate: r.provider.hourlyRate,
-      serviceLocation: r.provider.serviceLocation,
-      serviceRadius: r.provider.serviceRadius,
-      city: r.provider.user.city,
-      rating: r.provider.user.ratingSummary?.averageRating ?? 0,
-      totalReviews: r.provider.user.ratingSummary?.totalReviews ?? 0,
-      // Module 19: rank — the clean integration point for future
-      // rank-based sorting/boosting of provider listings.
-      rank: r.provider.user.providerRanking?.currentRank ?? ProviderRank.NONE,
-    }));
-
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      data: providers,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrevious: page > 1,
-      },
-    };
+    return this.providerService.listPublicProviders({ ...query, categoryId });
   }
 
   // ─── Provider Category Selection ─────────────────────────────────────
@@ -502,7 +439,7 @@ export class CategoriesService {
             provider: {
               user: {
                 isActive: true,
-                verificationStatus: 'APPROVED',
+                verificationStatus: "APPROVED",
                 profileCompleted: true,
               },
             },

@@ -12,5 +12,6 @@ import { VerificationModule } from "../verification/verification.module";
   imports: [PrismaModule, VerificationModule],
   controllers: [ProviderController, PublicProviderController],
   providers: [ProviderService, FileUploadService],
+  exports: [ProviderService],
 })
 export class ProviderModule {}

@@ -19,7 +19,7 @@ import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
 import { Public } from "src/common/decorators/public.decorator";
 import { UserRole } from "generated/prisma/client";
-import { PaginationDto } from "src/common/dtos/pagination.dto";
+import { PublicProvidersQueryDto } from "../provider/dtos/public-providers-query.dto";
 import { Permissions } from "src/common/decorators/permissions.decorator";
 
 // ─── Customer / Public Controller ──────────────────────────────────────
@@ -52,13 +52,15 @@ export class CategoriesController {
 
   @Public()
   @Get("/:id/providers")
-  @ApiOperation({ summary: "Get approved providers for a category" })
+  @ApiOperation({
+    summary:
+      "Get approved providers for a category — searched and sorted server-side",
+  })
   async getCategoryProviders(
     @Param("id", ParseUUIDPipe) id: string,
-    @Query() pagination: PaginationDto,
+    @Query() query: PublicProvidersQueryDto,
   ) {
-    const { page = 1, limit = 10 } = pagination;
-    return this.categoriesService.getCategoryProviders(id, page, limit);
+    return this.categoriesService.getCategoryProviders(id, query);
   }
 }
 

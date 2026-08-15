@@ -9,6 +9,7 @@ import { PrismaService } from "src/prisma/prisma.service";
 import { FileUploadService } from "src/common/services/file-upload.service";
 import { CompleteProviderProfileDto } from "./dtos/complete-provider-profile.dto";
 import { UpdateProviderProfileDto } from "./dtos/update-provider-profile.dto";
+import { PublicProvidersQueryDto } from "./dtos/public-providers-query.dto";
 import {
   Prisma,
   ProviderRank,
@@ -486,17 +487,12 @@ export class ProviderService {
    * The visibility rules match the per-category listing and what booking
    * requires, so a provider shown here can always actually be booked.
    */
-  async listPublicProviders(params: {
-    page?: number;
-    limit?: number;
-    categoryId?: string;
-    search?: string;
-    sortBy?: 'rating' | 'name' | 'price';
-  }) {
+  async listPublicProviders(params: PublicProvidersQueryDto) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
     const skip = (page - 1) * limit;
     const search = params.search?.trim();
+    const sortBy = params.sortBy ?? "rating";
 
     const where: Prisma.UserWhereInput = {
       role: UserRole.PROVIDER,
@@ -511,15 +507,31 @@ export class ProviderService {
       }),
       ...(search && {
         OR: [
-          { fullName: { contains: search, mode: 'insensitive' as const } },
+          { fullName: { contains: search, mode: "insensitive" as const } },
+          {
+            city: { name: { contains: search, mode: "insensitive" as const } },
+          },
           {
             providerProfile: {
-              serviceLocation: { contains: search, mode: 'insensitive' as const },
+              serviceLocation: {
+                contains: search,
+                mode: "insensitive" as const,
+              },
             },
           },
         ],
       }),
     };
+
+    // "Top rated" needs nulls last and Prisma cannot express that through a
+    // relation, so rating is ordered in SQL by id and re-sorted below. Name and
+    // price order fully in the database, which keeps their pagination correct.
+    const orderBy: Prisma.UserOrderByWithRelationInput =
+      sortBy === "name"
+        ? { fullName: "asc" }
+        : sortBy === "price"
+          ? { providerProfile: { hourlyRate: "asc" } }
+          : { ratingSummary: { averageRating: "desc" } };
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -529,14 +541,10 @@ export class ProviderService {
         include: {
           city: true,
           ratingSummary: true,
+          providerRanking: true,
           providerProfile: { include: { categories: true } },
         },
-        orderBy:
-          params.sortBy === 'name'
-            ? { fullName: 'asc' }
-            : params.sortBy === 'price'
-              ? { providerProfile: { hourlyRate: 'asc' } }
-              : { ratingSummary: { averageRating: 'desc' } },
+        orderBy,
       }),
       this.prisma.user.count({ where }),
     ]);
@@ -552,15 +560,17 @@ export class ProviderService {
       city: u.city,
       rating: u.ratingSummary?.averageRating ?? 0,
       totalReviews: u.ratingSummary?.totalReviews ?? 0,
+      // Rank badge for customer-facing listings, and the integration point for
+      // future rank-based boosting of the default order.
+      rank: u.providerRanking?.currentRank ?? ProviderRank.NONE,
     }));
 
     // Postgres sorts NULLs first on DESC, so providers with no ratings yet came
-    // back above the highest-rated ones under "Top rated". Prisma cannot express
-    // nulls-last through a relation, so the page is reordered here.
+    // back above the highest-rated ones under "Top rated".
     const data =
-      params.sortBy === 'name' || params.sortBy === 'price'
-        ? rows
-        : [...rows].sort((a, b) => Number(b.rating) - Number(a.rating));
+      sortBy === "rating"
+        ? [...rows].sort((a, b) => Number(b.rating) - Number(a.rating))
+        : rows;
 
     const totalPages = Math.ceil(total / limit);
 

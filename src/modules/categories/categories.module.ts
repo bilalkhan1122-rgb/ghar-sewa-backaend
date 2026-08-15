@@ -6,9 +6,10 @@ import {
   AdminCategoriesController,
 } from "./categories.controller";
 import { PrismaModule } from "src/prisma/prisma.module";
+import { ProviderModule } from "../provider/provider.module";
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, ProviderModule],
   controllers: [
     CategoriesController,
     ProviderCategoriesController,

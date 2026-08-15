@@ -15,12 +15,13 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
-import { ApiTags, ApiConsumes, ApiBody } from "@nestjs/swagger";
+import { ApiTags, ApiConsumes, ApiBody, ApiOperation } from "@nestjs/swagger";
 import { ProviderService } from "./provider.service";
 import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Public } from "src/common/decorators/public.decorator";
 import { CompleteProviderProfileDto } from "./dtos/complete-provider-profile.dto";
 import { UpdateProviderProfileDto } from "./dtos/update-provider-profile.dto";
+import { PublicProvidersQueryDto } from "./dtos/public-providers-query.dto";
 
 @ApiTags("Provider")
 @Controller("provider")
@@ -263,27 +264,19 @@ export class PublicProviderController {
   constructor(private readonly providerService: ProviderService) {}
 
   @Public()
-  @Get('/providers')
-  async listProviders(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('categoryId') categoryId?: string,
-    @Query('search') search?: string,
-    @Query('sortBy') sortBy?: 'rating' | 'name' | 'price',
-  ) {
-    return this.providerService.listPublicProviders({
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      categoryId,
-      search,
-      sortBy,
-    });
+  @Get("/providers")
+  @ApiOperation({
+    summary:
+      "Browse bookable providers — filtered, searched and sorted server-side",
+  })
+  async listProviders(@Query() query: PublicProvidersQueryDto) {
+    return this.providerService.listPublicProviders(query);
   }
 
   // Declared after /providers so the literal path is not captured as an :id.
   @Public()
-  @Get('/provider/:id')
-  async getPublicProfile(@Param('id') id: string) {
+  @Get("/provider/:id")
+  async getPublicProfile(@Param("id") id: string) {
     return this.providerService.getPublicProfile(id);
   }
 }

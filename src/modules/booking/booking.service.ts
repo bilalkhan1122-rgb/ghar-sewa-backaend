@@ -339,7 +339,10 @@ export class BookingService {
    * indistinguishable downstream from one accepted outright.
    */
   async acceptBookingCounter(customerId: string, bookingId: string) {
-    const { booking, bid } = await this.getPendingCounter(customerId, bookingId);
+    const { booking, bid } = await this.getPendingCounter(
+      customerId,
+      bookingId,
+    );
 
     // The new price still has to be covered, exactly as at booking time.
     await this.wallet.assertCanAfford(customerId, bid.offeredPrice);
@@ -389,7 +392,10 @@ export class BookingService {
    * a price is not the same as declining the job.
    */
   async declineBookingCounter(customerId: string, bookingId: string) {
-    const { booking, bid } = await this.getPendingCounter(customerId, bookingId);
+    const { booking, bid } = await this.getPendingCounter(
+      customerId,
+      bookingId,
+    );
 
     await this.prisma.bid.update({
       where: { id: bid.id },

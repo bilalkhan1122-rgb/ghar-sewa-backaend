@@ -354,7 +354,12 @@ export class JobsService {
           // own state to tell those two apart.
           bookings: {
             where: { status: { not: BookingStatus.CANCELLED } },
-            select: { id: true, status: true, completedAt: true, confirmedAt: true },
+            select: {
+              id: true,
+              status: true,
+              completedAt: true,
+              confirmedAt: true,
+            },
             orderBy: { createdAt: "desc" },
             take: 1,
           },
