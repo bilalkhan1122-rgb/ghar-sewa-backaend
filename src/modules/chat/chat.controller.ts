@@ -145,6 +145,44 @@ export class ChatController {
     return this.chatService.sendImageMessage(userId, id, file, caption);
   }
 
+  @Post("/conversations/:id/messages/voice")
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        file: { type: "string", format: "binary" },
+        durationMs: { type: "number" },
+      },
+    },
+  })
+  @ApiOperation({ summary: "Upload and send a voice note (max 5MB)" })
+  async sendVoiceMessage(
+    @GetUser("sub") userId: string,
+    @Param("id", ParseUUIDPipe) id: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new FileTypeValidator({
+            fileType: /(m4a|mp4|aac|mp3|mpeg|wav|webm|ogg)$/,
+            fallbackToMimetype: true,
+          }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+    @Body("durationMs") durationMs?: string,
+  ) {
+    return this.chatService.sendVoiceMessage(
+      userId,
+      id,
+      file,
+      durationMs ? Number(durationMs) : undefined,
+    );
+  }
+
   @Patch("/messages/:id")
   @ApiOperation({
     summary: "Edit your own message (within edit window)",

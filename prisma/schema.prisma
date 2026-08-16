@@ -132,6 +132,7 @@ enum MessageType {
   TEXT
   IMAGE
   LOCATION
+  VOICE
 
   @@map("message_type")
 }
@@ -1001,6 +1002,9 @@ model Message {
   type           MessageType @default(TEXT)
   content        String?     @db.Text
   attachmentUrl  String?     @db.VarChar(500)
+  /// Length of a VOICE note in milliseconds, so the bubble can show "0:07"
+  /// before the audio is fetched.
+  durationMs     Int?
   latitude       Float?
   longitude      Float?
   deliveredAt    DateTime?
@@ -1274,4 +1278,30 @@ model SupportReport {
   @@index([status])
   @@index([createdAt])
   @@map("support_reports")
+}
+
+/**
+ * Where customers send money to top up their wallet — the company's own
+ * JazzCash/EasyPaisa/bank accounts, shown on the Add Money screen.
+ * A table rather than config so the accounts can be changed from the admin
+ * dashboard without a deploy: a wrong account number here means customers send
+ * money into the void.
+ */
+model CompanyPaymentAccount {
+  id            String        @id @default(uuid())
+  method        PaymentMethod
+  /// Title the money must be sent to, e.g. "Ghar Sewa Pvt Ltd".
+  accountName   String        @db.VarChar(120)
+  accountNumber String        @db.VarChar(60)
+  /// Bank name for BANK_TRANSFER; null for wallet methods.
+  bankName      String?       @db.VarChar(120)
+  /// Optional note, e.g. "Send the screenshot right after transferring".
+  instructions  String?       @db.VarChar(500)
+  isActive      Boolean       @default(true)
+  displayOrder  Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([isActive, displayOrder])
+  @@map("company_payment_accounts")
 }

@@ -15,6 +15,7 @@ import { ChatModule } from "./modules/chat/chat.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { VerificationModule } from "./modules/verification/verification.module";
 import { DisputesModule } from "./modules/disputes/disputes.module";
+import { SupportModule } from "./modules/support/support.module";
 import { PenaltiesModule } from "./modules/penalties/penalties.module";
 import { WalletModule } from "./modules/wallet/wallet.module";
 import { AdminModule } from "./modules/admin/admin.module";
@@ -66,6 +67,7 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
     NotificationsModule,
     VerificationModule,
     DisputesModule,
+    SupportModule,
     PenaltiesModule,
     WalletModule,
     AdminModule,

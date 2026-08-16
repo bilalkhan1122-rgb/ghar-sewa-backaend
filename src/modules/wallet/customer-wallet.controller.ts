@@ -23,6 +23,7 @@ import { UserRole } from "generated/prisma/client";
 import { CreateTopUpDto } from "./dtos/create-topup.dto";
 import { TopUpQueryDto } from "./dtos/topup-query.dto";
 import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
+import { PaymentAccountsService } from "./payment-accounts.service";
 
 @ApiTags("Wallet (Customer)")
 @Controller("wallet")
@@ -31,7 +32,16 @@ export class CustomerWalletController {
   constructor(
     private readonly walletService: WalletService,
     private readonly topUpsService: TopUpsService,
+    private readonly paymentAccounts: PaymentAccountsService,
   ) {}
+
+  @Get("/payment-accounts")
+  @ApiOperation({
+    summary: "Where to transfer money before submitting a top-up request",
+  })
+  async paymentAccountsList() {
+    return this.paymentAccounts.listActive();
+  }
 
   @Get("/")
   @ApiOperation({ summary: "View my wallet balance" })

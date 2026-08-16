@@ -6,6 +6,8 @@ import { CustomerWalletController } from "./customer-wallet.controller";
 import { ProviderWalletController } from "./provider-wallet.controller";
 import { ProviderWithdrawalsController } from "./provider-withdrawals.controller";
 import { AdminWalletController } from "./admin-wallet.controller";
+import { AdminPaymentAccountsController } from "./admin-payment-accounts.controller";
+import { PaymentAccountsService } from "./payment-accounts.service";
 import { PrismaModule } from "src/prisma/prisma.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { FileUploadService } from "src/common/services/file-upload.service";
@@ -18,10 +20,12 @@ import { AdminAuditService } from "src/common/services/admin-audit.service";
     ProviderWalletController,
     ProviderWithdrawalsController,
     AdminWalletController,
+    AdminPaymentAccountsController,
   ],
   providers: [
     WalletService,
     TopUpsService,
+    PaymentAccountsService,
     WithdrawalsService,
     FileUploadService,
     AdminAuditService,

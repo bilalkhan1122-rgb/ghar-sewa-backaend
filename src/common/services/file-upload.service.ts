@@ -44,6 +44,23 @@ export class FileUploadService {
     "video/quicktime",
     "application/pdf",
   ];
+  /**
+   * Voice notes. Capped tighter than evidence because they are sent casually
+   * and often — a minute of AAC is well under a megabyte.
+   */
+  private readonly maxVoiceNoteSize = 5 * 1024 * 1024; // 5MB
+  private readonly allowedVoiceMimeTypes = [
+    // What expo-audio produces per platform, plus the browser's webm/ogg.
+    "audio/m4a",
+    "audio/x-m4a",
+    "audio/mp4",
+    "audio/aac",
+    "audio/mpeg",
+    "audio/webm",
+    "audio/ogg",
+    "audio/wav",
+    "audio/x-wav",
+  ];
   private dirsEnsured = false;
 
   constructor() {
@@ -65,6 +82,7 @@ export class FileUploadService {
       fs.mkdirSync(path.join(this.uploadsDir, "evidence"), { recursive: true });
       fs.mkdirSync(path.join(this.uploadsDir, "appeals"), { recursive: true });
       fs.mkdirSync(path.join(this.uploadsDir, "topups"), { recursive: true });
+      fs.mkdirSync(path.join(this.uploadsDir, "voice"), { recursive: true });
       this.dirsEnsured = true;
     } catch {
       // Directories already exist
@@ -145,6 +163,27 @@ export class FileUploadService {
   async uploadAppealFile(file: Express.Multer.File): Promise<string> {
     this.validateEvidenceFile(file);
     return this.saveFile(file, "appeals");
+  }
+
+  /**
+   * A chat voice note. Audio is stored as recorded — `compressImage` only
+   * touches images and passes everything else through untouched.
+   */
+  async uploadVoiceNote(file: Express.Multer.File): Promise<string> {
+    if (!file) {
+      throw new BadRequestException("No file provided");
+    }
+    if (!this.allowedVoiceMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        `Invalid audio type. Allowed types: ${this.allowedVoiceMimeTypes.join(", ")}`,
+      );
+    }
+    if (file.size > this.maxVoiceNoteSize) {
+      throw new BadRequestException(
+        `Voice note too large. Maximum size: ${this.maxVoiceNoteSize / 1024 / 1024}MB`,
+      );
+    }
+    return this.saveFile(file, "voice");
   }
 
   async uploadTopUpProof(file: Express.Multer.File): Promise<string> {

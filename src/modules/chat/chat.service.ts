@@ -221,6 +221,55 @@ export class ChatService {
 
   // ─── Send Image Message (file upload) ────────────────────────────────
 
+  /**
+   * A recorded voice note.
+   *
+   * `durationMs` comes from the recorder rather than being derived server-side:
+   * decoding audio to measure it would mean pulling ffmpeg into a serverless
+   * function for a number the client already has.
+   */
+  async sendVoiceMessage(
+    userId: string,
+    conversationId: string,
+    file: Express.Multer.File,
+    durationMs?: number,
+  ) {
+    const conversation = await this.getConversationForUser(
+      conversationId,
+      userId,
+    );
+
+    const attachmentUrl = await this.fileUpload.uploadVoiceNote(file);
+
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId,
+        senderId: userId,
+        type: MessageType.VOICE,
+        attachmentUrl,
+        durationMs:
+          durationMs && durationMs > 0 ? Math.round(durationMs) : null,
+        deliveredAt: new Date(),
+      },
+      include: this.messageIncludes(),
+    });
+
+    const lastMessage = this.messagePreview(message);
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        lastMessage,
+        lastMessageAt: new Date(),
+        lastActivity: new Date(),
+      },
+    });
+
+    this.gateway.emitNewMessage(conversationId, message, conversation, userId);
+    await this.notifyNewMessage(conversation, userId, lastMessage, message);
+
+    return message;
+  }
+
   async sendImageMessage(
     userId: string,
     conversationId: string,
@@ -717,6 +766,8 @@ export class ChatService {
         return "📷 Image";
       case MessageType.LOCATION:
         return "📍 Location";
+      case MessageType.VOICE:
+        return "🎤 Voice message";
       default:
         return "";
     }
