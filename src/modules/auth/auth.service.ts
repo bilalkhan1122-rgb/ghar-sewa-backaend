@@ -33,6 +33,7 @@ import { GoogleAuthDto } from "./dtos/google-auth.dto";
 import { VerifyEmailDto } from "./dtos/verify-email.dto";
 import { ForgotPasswordDto } from "./dtos/forgot-password.dto";
 import { ResetPasswordDto } from "./dtos/reset-password.dto";
+import { SetPasswordDto } from "./dtos/set-password.dto";
 import { EmailService } from "../email/email.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
@@ -495,6 +496,57 @@ export class AuthService {
     };
   }
 
+  /**
+   * Sets or changes the signed-in user's password.
+   *
+   * A Google account has no password, so it sets its first one without
+   * proving an old one — the session is the proof, and there is nothing to
+   * verify against. An account that already has a password must supply it,
+   * so a borrowed unlocked phone cannot be used to lock the owner out.
+   *
+   * Existing sessions are deliberately left alone: unlike a reset (where the
+   * account may be compromised), this is a deliberate act by someone already
+   * signed in, and dropping their other devices would be surprising.
+   */
+  async setPassword(userId: string, dto: SetPasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    if (user.passwordHash) {
+      if (!dto.currentPassword) {
+        throw new BadRequestException(
+          "Enter your current password to change it",
+        );
+      }
+      const matches = await bcrypt.compare(
+        dto.currentPassword,
+        user.passwordHash,
+      );
+      if (!matches) {
+        throw new UnauthorizedException("Current password is incorrect");
+      }
+    }
+
+    const passwordHash = await this.hashData(dto.newPassword);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    this.logger.log({
+      message: user.passwordHash ? "Password changed" : "Password set",
+      userId,
+    });
+
+    return {
+      message: user.passwordHash
+        ? "Password changed successfully"
+        : "Password set. You can now sign in with your email and password as well as Google.",
+    };
+  }
+
   async refreshToken(
     userId: string,
     rt: string,
@@ -749,7 +801,10 @@ export class AuthService {
   private sanitizeUser(user: User) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash, refreshToken, ...safeUser } = user;
-    return safeUser;
+    // Whether a password exists, never the hash itself. Google accounts start
+    // without one, and the app needs to know so it can offer "create a
+    // password" instead of asking for a current one that does not exist.
+    return { ...safeUser, hasPassword: Boolean(passwordHash) };
   }
 
   async hashData(data: string): Promise<string> {

@@ -20,6 +20,7 @@ import { GoogleAuthDto } from "./dtos/google-auth.dto";
 import { VerifyEmailDto } from "./dtos/verify-email.dto";
 import { ForgotPasswordDto } from "./dtos/forgot-password.dto";
 import { ResetPasswordDto } from "./dtos/reset-password.dto";
+import { SetPasswordDto } from "./dtos/set-password.dto";
 import { Throttle, SkipThrottle } from "@nestjs/throttler";
 import { COOKIE_CONFIG } from "src/common/constants/cookie.config";
 import { CookieOptions } from "express";
@@ -261,6 +262,12 @@ export class AuthController {
     return {
       message: "Logged out successfully",
     };
+  }
+
+  @Throttle({ strict: { ttl: 60000, limit: 5 } })
+  @Post("/set-password")
+  setPassword(@GetUser("sub") userId: string, @Body() dto: SetPasswordDto) {
+    return this.authService.setPassword(userId, dto);
   }
 
   @SkipThrottle()
