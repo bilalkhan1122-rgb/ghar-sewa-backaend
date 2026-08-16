@@ -557,6 +557,7 @@ export class ProviderService {
       hourlyRate: u.providerProfile?.hourlyRate ?? null,
       serviceLocation: u.providerProfile?.serviceLocation ?? null,
       serviceRadius: u.providerProfile?.serviceRadius ?? null,
+      isOnline: u.providerProfile?.isOnline ?? false,
       city: u.city,
       rating: u.ratingSummary?.averageRating ?? 0,
       totalReviews: u.ratingSummary?.totalReviews ?? 0,
@@ -585,6 +586,38 @@ export class ProviderService {
         hasPrevious: page > 1,
       },
     };
+  }
+
+  /**
+   * Provider's own availability switch.
+   *
+   * Only stored and shown — it does not hide them from the job feed or stop
+   * them being booked. Going offline is a signal to customers ("probably will
+   * not answer right now"), not a change to what the platform will let them
+   * do, and conflating the two would silently cut a provider off from work
+   * they never meant to decline.
+   */
+  async setOnlineStatus(userId: string, isOnline: boolean) {
+    const profile = await this.prisma.providerProfile.findUnique({
+      where: { userId },
+      select: { userId: true },
+    });
+    if (!profile) {
+      throw new NotFoundException(
+        "Complete your provider profile before going online",
+      );
+    }
+
+    const updated = await this.prisma.providerProfile.update({
+      where: { userId },
+      data: {
+        isOnline,
+        ...(isOnline ? { lastOnlineAt: new Date() } : {}),
+      },
+      select: { isOnline: true, lastOnlineAt: true },
+    });
+
+    return updated;
   }
 
   async getPublicProfile(providerId: string) {
@@ -629,6 +662,7 @@ export class ProviderService {
       id: user.id,
       fullName: user.fullName,
       profilePhoto: user.profilePhoto,
+      isOnline: profile.isOnline,
       bio: profile.bio,
       hourlyRate: profile.hourlyRate,
       serviceLocation: profile.serviceLocation,

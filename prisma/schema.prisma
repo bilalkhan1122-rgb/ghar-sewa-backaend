@@ -253,6 +253,27 @@ enum DisputeEvidenceType {
   @@map("dispute_evidence_type")
 }
 
+/// What a user is reporting. Disputes stay separate: those are tied to a
+/// booking and can move money, while these are free-form problem reports.
+enum SupportReportCategory {
+  APP_BUG
+  PROVIDER_ISSUE
+  CUSTOMER_ISSUE
+  PAYMENT_ISSUE
+  OTHER
+
+  @@map("support_report_category")
+}
+
+enum SupportReportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+
+  @@map("support_report_status")
+}
+
 enum PenaltyType {
   WARNING
   TEMPORARY_BAN
@@ -355,7 +376,7 @@ model City {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
+  users User[]
 
   @@map("cities")
 }
@@ -376,57 +397,59 @@ model User {
   verificationStatus VerificationStatus @default(APPROVED)
 
   // Social login metadata
-  authProvider       AuthProvider       @default(LOCAL)
-  googleId           String?            @unique
-  avatarUrl          String?            @db.VarChar(500)
-  emailVerified      Boolean            @default(true)
-  emailVerifiedAt    DateTime?
+  authProvider    AuthProvider @default(LOCAL)
+  googleId        String?      @unique
+  avatarUrl       String?      @db.VarChar(500)
+  emailVerified   Boolean      @default(true)
+  emailVerifiedAt DateTime?
 
   refreshToken String? @db.Text // Legacy field - kept for backward compatibility
-  isActive     Boolean  @default(true) // for soft delete
+  isActive     Boolean @default(true) // for soft delete
 
   // Customer & Provider shared fields
-  profilePhoto  String?  @db.VarChar(500)
-  walletBalance Decimal  @default(0) @db.Decimal(10, 2)
-  totalSpent    Decimal  @default(0) @db.Decimal(10, 2)
-  totalTopups   Decimal  @default(0) @db.Decimal(10, 2)
+  profilePhoto  String?   @db.VarChar(500)
+  walletBalance Decimal   @default(0) @db.Decimal(10, 2)
+  totalSpent    Decimal   @default(0) @db.Decimal(10, 2)
+  totalTopups   Decimal   @default(0) @db.Decimal(10, 2)
   deletedAt     DateTime?
 
   // Relations
-  city          City?           @relation(fields: [cityId], references: [id])
-  refreshTokens RefreshToken[]
-  emailTokens   EmailToken[]
-  providerRanking   ProviderRanking?
-  providerRankHistory ProviderRankHistory[]
-  providerProfile ProviderProfile?
-  customerBookings  Booking[]  @relation("CustomerBookings")
-  providerBookings  Booking[]  @relation("ProviderBookings")
-  customerJobs      Job[]      @relation("CustomerJobs")
-  providerBids      Bid[]      @relation("ProviderBids")
-  reviewsWritten    Review[]   @relation("ReviewerReviews")
-  reviewsReceived   Review[]   @relation("RevieweeReviews")
-  customerReviews   Review[]   @relation("CustomerReviews")
-  providerReviews   Review[]   @relation("ProviderReviews")
-  ratingSummary     RatingSummary?
-  ratingFlags       RatingFlag[] @relation("ProviderRatingFlags")
-  customerConversations Conversation[] @relation("CustomerConversations")
-  providerConversations Conversation[] @relation("ProviderConversations")
-  sentMessages      Message[]   @relation("SentMessages")
-  notifications     Notification[]
-  devices           DeviceRegistration[]
+  city                   City?                   @relation(fields: [cityId], references: [id])
+  refreshTokens          RefreshToken[]
+  emailTokens            EmailToken[]
+  providerRanking        ProviderRanking?
+  providerRankHistory    ProviderRankHistory[]
+  providerProfile        ProviderProfile?
+  customerBookings       Booking[]               @relation("CustomerBookings")
+  providerBookings       Booking[]               @relation("ProviderBookings")
+  customerJobs           Job[]                   @relation("CustomerJobs")
+  providerBids           Bid[]                   @relation("ProviderBids")
+  reviewsWritten         Review[]                @relation("ReviewerReviews")
+  reviewsReceived        Review[]                @relation("RevieweeReviews")
+  customerReviews        Review[]                @relation("CustomerReviews")
+  providerReviews        Review[]                @relation("ProviderReviews")
+  ratingSummary          RatingSummary?
+  ratingFlags            RatingFlag[]            @relation("ProviderRatingFlags")
+  customerConversations  Conversation[]          @relation("CustomerConversations")
+  providerConversations  Conversation[]          @relation("ProviderConversations")
+  sentMessages           Message[]               @relation("SentMessages")
+  notifications          Notification[]
+  devices                DeviceRegistration[]
   notificationPreference NotificationPreference?
-  verificationRequests VerificationRequest[] @relation("ProviderVerificationRequests")
-  disputesRaised   Dispute[]        @relation("RaisedDisputes")
-  disputesOpposed  Dispute[]        @relation("OpposedDisputes")
-  disputeEvidences DisputeEvidence[] @relation("DisputeEvidenceUploads")
-  disputeTimelines DisputeTimeline[] @relation("DisputeTimelineActors")
-  penalties        ProviderPenalty[] @relation("ProviderPenalties")
-  appeals          Appeal[]         @relation("ProviderAppeals")
-  wallet           Wallet?
-  topUpRequests    TopUpRequest[]
-  withdrawalRequests WithdrawalRequest[] @relation("ProviderWithdrawals")
-  admin            Admin?
-  adminAuditLogs   AdminAuditLog[] @relation("AdminAuditLogs")
+  verificationRequests   VerificationRequest[]   @relation("ProviderVerificationRequests")
+  disputesRaised         Dispute[]               @relation("RaisedDisputes")
+  disputesOpposed        Dispute[]               @relation("OpposedDisputes")
+  disputeEvidences       DisputeEvidence[]       @relation("DisputeEvidenceUploads")
+  disputeTimelines       DisputeTimeline[]       @relation("DisputeTimelineActors")
+  penalties              ProviderPenalty[]       @relation("ProviderPenalties")
+  appeals                Appeal[]                @relation("ProviderAppeals")
+  wallet                 Wallet?
+  topUpRequests          TopUpRequest[]
+  withdrawalRequests     WithdrawalRequest[]     @relation("ProviderWithdrawals")
+  admin                  Admin?
+  adminAuditLogs         AdminAuditLog[]         @relation("AdminAuditLogs")
+  supportReports         SupportReport[]         @relation("SupportReportsRaised")
+  supportReportsAbout    SupportReport[]         @relation("SupportReportsAbout")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -435,13 +458,13 @@ model User {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @db.Text
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  token  String @db.Text
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   deviceInfo String? @db.VarChar(255) // Browser/device identifier
-  ipAddress  String? @db.VarChar(45)  // IPv4 or IPv6
+  ipAddress  String? @db.VarChar(45) // IPv4 or IPv6
 
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -495,7 +518,9 @@ model ProviderRanking {
   @@map("provider_rankings")
 }
 
-/** Immutable audit trail of every rank change (upgrade or downgrade). */
+/**
+ * Immutable audit trail of every rank change (upgrade or downgrade).
+ */
 model ProviderRankHistory {
   id            String       @id @default(uuid())
   providerId    String
@@ -523,8 +548,8 @@ model ServiceCategory {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  providers   ProviderServiceCategory[]
-  jobs        Job[]
+  providers ProviderServiceCategory[]
+  jobs      Job[]
 
   @@index([slug])
   @@index([isActive, displayOrder])
@@ -532,16 +557,25 @@ model ServiceCategory {
 }
 
 model ProviderProfile {
-  userId         String    @id
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bio            String?   @db.VarChar(1000)
-  hourlyRate     Decimal?  @db.Decimal(10, 2)
-  serviceRadius  Int?
+  userId          String   @id
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio             String?  @db.VarChar(1000)
+  hourlyRate      Decimal? @db.Decimal(10, 2)
+  serviceRadius   Int?
   serviceLocation String?  @db.VarChar(500)
-  facePhoto      String?   @db.VarChar(500)
-  cnicNumber     String?   @unique @db.VarChar(20)
-  cnicFrontImage String?   @db.VarChar(500)
-  cnicBackImage  String?   @db.VarChar(500)
+  facePhoto       String?  @db.VarChar(500)
+  cnicNumber      String?  @unique @db.VarChar(20)
+  cnicFrontImage  String?  @db.VarChar(500)
+  cnicBackImage   String?  @db.VarChar(500)
+
+  /// Provider's own availability switch, shown to customers as an online dot.
+  /// Deliberately manual rather than derived from app activity: a provider who
+  /// has the app open is not necessarily free to take work, and one who has it
+  /// closed may still be reachable by phone.
+  isOnline     Boolean   @default(false)
+  /// When they last went online — lets a stale switch be aged out later
+  /// without another migration.
+  lastOnlineAt DateTime?
 
   categories    ProviderServiceCategory[]
   galleryImages GalleryImage[]
@@ -556,7 +590,7 @@ model ProviderServiceCategory {
   providerId String
   categoryId String
 
-  provider ProviderProfile  @relation(fields: [providerId], references: [userId], onDelete: Cascade)
+  provider ProviderProfile @relation(fields: [providerId], references: [userId], onDelete: Cascade)
   category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@id([providerId, categoryId])
@@ -564,11 +598,11 @@ model ProviderServiceCategory {
 }
 
 model GalleryImage {
-  id         String   @id @default(uuid())
+  id         String          @id @default(uuid())
   providerId String
   provider   ProviderProfile @relation(fields: [providerId], references: [userId], onDelete: Cascade)
-  imageUrl   String   @db.VarChar(500)
-  createdAt  DateTime @default(now())
+  imageUrl   String          @db.VarChar(500)
+  createdAt  DateTime        @default(now())
 
   @@map("gallery_images")
 }
@@ -593,9 +627,9 @@ model Booking {
   job      Job  @relation(fields: [jobId], references: [id])
 
   cancellationRecords CancellationRecord[]
-  reviews      Review[]
-  conversations Conversation[]
-  disputes     Dispute[]
+  reviews             Review[]
+  conversations       Conversation[]
+  disputes            Dispute[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -608,32 +642,32 @@ model Booking {
 }
 
 model Job {
-  id              String    @id @default(uuid())
-  customerId      String
-  categoryId      String
-  title           String    @db.VarChar(200)
-  description     String    @db.Text
-  address         String    @db.VarChar(500)
-  latitude        Float
-  longitude       Float
-  offeredPrice    Decimal   @db.Decimal(10, 2)
-  status          JobStatus @default(PENDING)
-  expiresAt       DateTime
+  id                String    @id @default(uuid())
+  customerId        String
+  categoryId        String
+  title             String    @db.VarChar(200)
+  description       String    @db.Text
+  address           String    @db.VarChar(500)
+  latitude          Float
+  longitude         Float
+  offeredPrice      Decimal   @db.Decimal(10, 2)
+  status            JobStatus @default(PENDING)
+  expiresAt         DateTime
   preferredSchedule DateTime?
-  additionalNotes String?   @db.VarChar(1000)
+  additionalNotes   String?   @db.VarChar(1000)
   // Module 20: urgent jobs expire in 6 hours (vs 24h normal), can only be
   // set by the customer at creation time, and float to the top of the
   // provider feed.
-  isUrgent        Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  isUrgent          Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  customer  User            @relation("CustomerJobs", fields: [customerId], references: [id])
-  category  ServiceCategory @relation(fields: [categoryId], references: [id])
-  images    JobImage[]
-  bids      Bid[]
-  bookings  Booking[]
-  timeline  JobTimeline[]
+  customer      User                 @relation("CustomerJobs", fields: [customerId], references: [id])
+  category      ServiceCategory      @relation(fields: [categoryId], references: [id])
+  images        JobImage[]
+  bids          Bid[]
+  bookings      Booking[]
+  timeline      JobTimeline[]
   cancellations CancellationRecord[]
   reviews       Review[]
   conversations Conversation[]
@@ -663,20 +697,20 @@ model JobImage {
 }
 
 model Bid {
-  id          String   @id @default(uuid())
-  jobId       String
-  providerId  String
-  offeredPrice Decimal @db.Decimal(10, 2)
-  message     String?  @db.VarChar(500)
-  status      BidStatus @default(PENDING)
+  id             String    @id @default(uuid())
+  jobId          String
+  providerId     String
+  offeredPrice   Decimal   @db.Decimal(10, 2)
+  message        String?   @db.VarChar(500)
+  status         BidStatus @default(PENDING)
   // Customer's counter to this bid. One round only: the provider either
   // accepts (booking is created at counterPrice) or declines (bid returns to
   // PENDING so the original offeredPrice can still be accepted).
   counterPrice   Decimal?  @db.Decimal(10, 2)
   counterMessage String?   @db.VarChar(500)
   counteredAt    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   job      Job  @relation(fields: [jobId], references: [id])
   provider User @relation("ProviderBids", fields: [providerId], references: [id])
@@ -713,8 +747,8 @@ model CancellationRecord {
   reason           String?          @db.VarChar(500)
   createdAt        DateTime         @default(now())
 
-  job     Job?            @relation(fields: [jobId], references: [id])
-  booking Booking?        @relation(fields: [bookingId], references: [id])
+  job     Job?             @relation(fields: [jobId], references: [id])
+  booking Booking?         @relation(fields: [bookingId], references: [id])
   penalty ProviderPenalty? @relation(fields: [penaltyId], references: [id])
 
   @@index([jobId])
@@ -788,14 +822,14 @@ model Dispute {
 }
 
 model DisputeEvidence {
-  id         String             @id @default(uuid())
+  id         String              @id @default(uuid())
   disputeId  String
   uploaderId String
   type       DisputeEvidenceType
-  fileUrl    String             @db.VarChar(500)
-  mimeType   String             @db.VarChar(100)
+  fileUrl    String              @db.VarChar(500)
+  mimeType   String              @db.VarChar(100)
   size       Int
-  createdAt  DateTime           @default(now())
+  createdAt  DateTime            @default(now())
 
   dispute  Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
   uploader User    @relation("DisputeEvidenceUploads", fields: [uploaderId], references: [id])
@@ -897,17 +931,17 @@ model Review {
 }
 
 model RatingSummary {
-  id            String   @id @default(uuid())
-  userId        String   @unique
-  averageRating Decimal  @default(0) @db.Decimal(3, 2)
-  totalReviews  Int      @default(0)
-  fiveStarCount Int      @default(0)
-  fourStarCount Int      @default(0)
-  threeStarCount Int     @default(0)
-  twoStarCount  Int      @default(0)
-  oneStarCount  Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  averageRating  Decimal  @default(0) @db.Decimal(3, 2)
+  totalReviews   Int      @default(0)
+  fiveStarCount  Int      @default(0)
+  fourStarCount  Int      @default(0)
+  threeStarCount Int      @default(0)
+  twoStarCount   Int      @default(0)
+  oneStarCount   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -915,12 +949,12 @@ model RatingSummary {
 }
 
 model RatingFlag {
-  id            String          @id @default(uuid())
+  id            String           @id @default(uuid())
   providerId    String
-  reason        String          @db.VarChar(500)
-  averageRating Decimal         @db.Decimal(3, 2)
+  reason        String           @db.VarChar(500)
+  averageRating Decimal          @db.Decimal(3, 2)
   status        RatingFlagStatus @default(OPEN)
-  createdAt     DateTime        @default(now())
+  createdAt     DateTime         @default(now())
 
   provider User @relation("ProviderRatingFlags", fields: [providerId], references: [id], onDelete: Cascade)
 
@@ -932,23 +966,23 @@ model RatingFlag {
 // ─── Module 9: In-App Chat ─────────────────────────────────────────────
 
 model Conversation {
-  id            String    @id @default(uuid())
-  jobId         String
-  bookingId     String?
-  customerId    String
-  providerId    String
-  lastMessage   String?   @db.VarChar(500)
-  lastMessageAt DateTime?
-  lastActivity  DateTime  @default(now())
+  id                String    @id @default(uuid())
+  jobId             String
+  bookingId         String?
+  customerId        String
+  providerId        String
+  lastMessage       String?   @db.VarChar(500)
+  lastMessageAt     DateTime?
+  lastActivity      DateTime  @default(now())
   customerDeletedAt DateTime?
   providerDeletedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  job      Job      @relation(fields: [jobId], references: [id])
-  booking  Booking? @relation(fields: [bookingId], references: [id])
-  customer User     @relation("CustomerConversations", fields: [customerId], references: [id])
-  provider User     @relation("ProviderConversations", fields: [providerId], references: [id])
+  job      Job       @relation(fields: [jobId], references: [id])
+  booking  Booking?  @relation(fields: [bookingId], references: [id])
+  customer User      @relation("CustomerConversations", fields: [customerId], references: [id])
+  provider User      @relation("ProviderConversations", fields: [providerId], references: [id])
   messages Message[]
 
   // One thread per pair of people, not per job: chatting about a second job
@@ -986,22 +1020,22 @@ model Message {
 // ─── Module 10: Push Notifications ─────────────────────────────────────
 
 model Notification {
-  id                String                    @id @default(uuid())
+  id                String                     @id @default(uuid())
   userId            String
   type              NotificationType
   category          NotificationCategory
-  title             String                    @db.VarChar(200)
-  message           String                    @db.Text
-  relatedEntityType String?                   @db.VarChar(100)
+  title             String                     @db.VarChar(200)
+  message           String                     @db.Text
+  relatedEntityType String?                    @db.VarChar(100)
   relatedEntityId   String?
-  isRead            Boolean                   @default(false)
+  isRead            Boolean                    @default(false)
   deliveryStatus    NotificationDeliveryStatus @default(PENDING)
-  deliveryError     String?                   @db.VarChar(500)
+  deliveryError     String?                    @db.VarChar(500)
   sentAt            DateTime?
   readAt            DateTime?
   deliveredAt       DateTime?
   deletedAt         DateTime?
-  createdAt         DateTime                  @default(now())
+  createdAt         DateTime                   @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1011,13 +1045,13 @@ model Notification {
 }
 
 model DeviceRegistration {
-  id           String    @id @default(uuid())
+  id           String   @id @default(uuid())
   userId       String
-  deviceToken  String    @db.VarChar(500)
-  platform     String    @db.VarChar(50) // ios | android | web
-  lastActiveAt DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  deviceToken  String   @db.VarChar(500)
+  platform     String   @db.VarChar(50) // ios | android | web
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1045,16 +1079,16 @@ model NotificationPreference {
 // ─── Module 14: Wallet System ───────────────────────────────────────────
 
 model Wallet {
-  id               String      @id @default(uuid())
-  userId           String      @unique
-  type             WalletType
-  balance          Decimal     @default(0) @db.Decimal(15, 2) // available balance
-  heldBalance      Decimal     @default(0) @db.Decimal(15, 2) // funds held for pending withdrawals
-  lifetimeCredits  Decimal     @default(0) @db.Decimal(15, 2)
-  lifetimeDebits   Decimal     @default(0) @db.Decimal(15, 2)
-  status           WalletStatus @default(ACTIVE)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id              String       @id @default(uuid())
+  userId          String       @unique
+  type            WalletType
+  balance         Decimal      @default(0) @db.Decimal(15, 2) // available balance
+  heldBalance     Decimal      @default(0) @db.Decimal(15, 2) // funds held for pending withdrawals
+  lifetimeCredits Decimal      @default(0) @db.Decimal(15, 2)
+  lifetimeDebits  Decimal      @default(0) @db.Decimal(15, 2)
+  status          WalletStatus @default(ACTIVE)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions WalletTransaction[]
@@ -1068,20 +1102,20 @@ model Wallet {
 }
 
 model WalletTransaction {
-  id            String                @id @default(uuid())
+  id            String                  @id @default(uuid())
   walletId      String
   type          WalletTransactionType
-  amount        Decimal               @db.Decimal(15, 2) // signed: positive = credit, negative = debit
-  balanceBefore Decimal               @db.Decimal(15, 2)
-  balanceAfter  Decimal               @db.Decimal(15, 2)
-  referenceType String?               @db.VarChar(50) // BOOKING | TOP_UP | WITHDRAWAL | DISPUTE | ADJUSTMENT
+  amount        Decimal                 @db.Decimal(15, 2) // signed: positive = credit, negative = debit
+  balanceBefore Decimal                 @db.Decimal(15, 2)
+  balanceAfter  Decimal                 @db.Decimal(15, 2)
+  referenceType String?                 @db.VarChar(50) // BOOKING | TOP_UP | WITHDRAWAL | DISPUTE | ADJUSTMENT
   referenceId   String?
   // Idempotency key — unique per logical operation so completed jobs
   // can never be paid twice even under concurrent requests.
-  processingKey String?               @unique @db.VarChar(200)
-  description   String?               @db.VarChar(500)
+  processingKey String?                 @unique @db.VarChar(200)
+  description   String?                 @db.VarChar(500)
   status        WalletTransactionStatus @default(COMPLETED)
-  createdAt     DateTime              @default(now())
+  createdAt     DateTime                @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
@@ -1093,21 +1127,21 @@ model WalletTransaction {
 
 // Manual top-up requests (Phase 1). Balance only changes on approval.
 model TopUpRequest {
-  id                   String       @id @default(uuid())
+  id                   String        @id @default(uuid())
   userId               String
   walletId             String
-  amount               Decimal      @db.Decimal(15, 2)
+  amount               Decimal       @db.Decimal(15, 2)
   paymentMethod        PaymentMethod
-  transactionReference String?      @db.VarChar(200)
-  proofImage           String?      @db.VarChar(500)
-  notes                String?      @db.VarChar(500)
-  status               TopUpStatus  @default(PENDING)
-  submittedAt          DateTime     @default(now())
+  transactionReference String?       @db.VarChar(200)
+  proofImage           String?       @db.VarChar(500)
+  notes                String?       @db.VarChar(500)
+  status               TopUpStatus   @default(PENDING)
+  submittedAt          DateTime      @default(now())
   reviewedAt           DateTime?
   reviewedBy           String?
-  rejectionReason      String?      @db.VarChar(500)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  rejectionReason      String?       @db.VarChar(500)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
@@ -1148,16 +1182,16 @@ model WithdrawalRequest {
 
 // Immutable audit trail for every wallet operation.
 model WalletAuditLog {
-  id              String   @id @default(uuid())
-  walletId        String
-  actorUserId     String?
-  actorAdminId    String?
-  action          String   @db.VarChar(100)
-  previousValues  Json?
-  newValues       Json?
-  referenceType   String?  @db.VarChar(50)
-  referenceId     String?
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  walletId       String
+  actorUserId    String?
+  actorAdminId   String?
+  action         String   @db.VarChar(100)
+  previousValues Json?
+  newValues      Json?
+  referenceType  String?  @db.VarChar(50)
+  referenceId    String?
+  createdAt      DateTime @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
@@ -1188,7 +1222,9 @@ model Admin {
   @@map("admins")
 }
 
-/** Immutable audit trail for every admin action. Never editable/deletable. */
+/**
+ * Immutable audit trail for every admin action. Never editable/deletable.
+ */
 model AdminAuditLog {
   id             String   @id @default(uuid())
   adminId        String // admin user id (matches JWT sub)
@@ -1207,4 +1243,35 @@ model AdminAuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@map("admin_audit_logs")
+}
+
+/**
+ * A problem reported from the app's Report screen — a bad experience with
+ * someone, a payment that looks wrong, or a bug.
+ * Deliberately not a Dispute: a dispute requires a completed booking, runs to a
+ * refund decision and has a 48-hour window. Most of what users want to report
+ * fits none of that.
+ */
+model SupportReport {
+  id            String                @id @default(uuid())
+  reporterId    String
+  category      SupportReportCategory
+  subject       String                @db.VarChar(200)
+  description   String                @db.VarChar(2000)
+  attachmentUrl String?               @db.VarChar(500)
+  /// The other party this is about, when the report names one.
+  aboutUserId   String?
+  status        SupportReportStatus   @default(OPEN)
+  adminNote     String?               @db.VarChar(2000)
+  resolvedAt    DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  reporter  User  @relation("SupportReportsRaised", fields: [reporterId], references: [id])
+  aboutUser User? @relation("SupportReportsAbout", fields: [aboutUserId], references: [id])
+
+  @@index([reporterId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("support_reports")
 }

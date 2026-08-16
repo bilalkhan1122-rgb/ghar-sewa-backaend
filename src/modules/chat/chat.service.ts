@@ -39,6 +39,16 @@ import {
  */
 export const MESSAGE_EDIT_WINDOW_MINUTES = 5;
 
+/**
+ * Longest message preview carried in a push. A notification banner shows two
+ * lines at most, and the rest is dropped by the OS anyway.
+ */
+const PUSH_PREVIEW_LIMIT = 120;
+
+function truncate(text: string, limit: number): string {
+  return text.length <= limit ? text : `${text.slice(0, limit - 1).trimEnd()}…`;
+}
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -648,12 +658,19 @@ export class ChatService {
     conversation: { id: string; customerId: string; providerId: string },
     senderId: string,
     preview: string,
-    message?: unknown,
+    message?: { sender?: { fullName?: string | null } } | null,
   ) {
     const recipientId =
       conversation.customerId === senderId
         ? conversation.providerId
         : conversation.customerId;
+
+    // Who it is from is the useful part of a message notification. Every chat
+    // push used to read "New message" with the text underneath, so a phone
+    // showing several of them said nothing about who was waiting on a reply.
+    const senderName = message?.sender?.fullName?.trim();
+    const title = senderName || "New message";
+    const body = truncate(preview || "Sent you a message", PUSH_PREVIEW_LIMIT);
 
     // Awaited, not fire-and-forget: on Vercel the function is frozen as soon
     // as the response is sent, so a promise left running here is simply never
@@ -664,8 +681,8 @@ export class ChatService {
         this.notifications.send({
           userId: recipientId,
           type: NotificationType.NEW_MESSAGE,
-          title: "New message",
-          message: preview || "You have a new message",
+          title,
+          message: body,
           relatedEntityType: "CONVERSATION",
           relatedEntityId: conversation.id,
         }),

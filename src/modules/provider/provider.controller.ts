@@ -21,6 +21,7 @@ import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Public } from "src/common/decorators/public.decorator";
 import { CompleteProviderProfileDto } from "./dtos/complete-provider-profile.dto";
 import { UpdateProviderProfileDto } from "./dtos/update-provider-profile.dto";
+import { AvailabilityDto } from "./dtos/availability.dto";
 import { PublicProvidersQueryDto } from "./dtos/public-providers-query.dto";
 
 @ApiTags("Provider")
@@ -46,6 +47,15 @@ export class ProviderController {
   }
 
   // ─── Update Profile ──────────────────────────────────────────────────
+
+  @Patch("/profile/availability")
+  @ApiOperation({ summary: "Go online or offline" })
+  async setAvailability(
+    @GetUser("sub") userId: string,
+    @Body() dto: AvailabilityDto,
+  ) {
+    return this.providerService.setOnlineStatus(userId, dto.isOnline);
+  }
 
   @Patch("/profile")
   async updateProfile(
