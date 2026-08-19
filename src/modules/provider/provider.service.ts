@@ -20,6 +20,31 @@ import {
 } from "generated/prisma/client";
 import { VerificationService } from "../verification/verification.service";
 
+/**
+ * How long a provider keeps counting as online after their last heartbeat.
+ *
+ * The switch on the provider dashboard records intent ("I am available"), not
+ * presence — nothing used to clear it, so a provider who toggled on once and
+ * closed the app showed a green dot to customers indefinitely. The app pings
+ * `/provider/profile/heartbeat` every couple of minutes while it is open, and
+ * anything older than this window is reported as offline.
+ *
+ * Comfortably longer than the client's ping interval, so one dropped request
+ * on a bad connection does not blink the dot off.
+ */
+const PRESENCE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * What customers see. Requires both halves: the provider meant to be available,
+ * and the app has checked in recently enough for that to still be true.
+ */
+function isPresent(
+  profile: { isOnline: boolean; lastOnlineAt: Date | null } | null | undefined,
+): boolean {
+  if (!profile?.isOnline || !profile.lastOnlineAt) return false;
+  return Date.now() - profile.lastOnlineAt.getTime() < PRESENCE_TTL_MS;
+}
+
 @Injectable()
 export class ProviderService {
   constructor(
@@ -115,6 +140,16 @@ export class ProviderService {
         serviceRadius: dto.serviceRadius,
         cnicNumber: dto.cnicNumber,
       },
+    });
+
+    // A zeroed rating summary from the outset. It used to be created lazily by
+    // the first review, which left every unreviewed provider without the row —
+    // and "Top rated" orders on it, so Postgres put those missing rows (NULL)
+    // *ahead* of the highest-rated providers. See `listPublicProviders`.
+    await this.prisma.ratingSummary.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
     });
 
     // Create category relations
@@ -557,7 +592,7 @@ export class ProviderService {
       hourlyRate: u.providerProfile?.hourlyRate ?? null,
       serviceLocation: u.providerProfile?.serviceLocation ?? null,
       serviceRadius: u.providerProfile?.serviceRadius ?? null,
-      isOnline: u.providerProfile?.isOnline ?? false,
+      isOnline: isPresent(u.providerProfile),
       city: u.city,
       rating: u.ratingSummary?.averageRating ?? 0,
       totalReviews: u.ratingSummary?.totalReviews ?? 0,
@@ -566,8 +601,11 @@ export class ProviderService {
       rank: u.providerRanking?.currentRank ?? ProviderRank.NONE,
     }));
 
-    // Postgres sorts NULLs first on DESC, so providers with no ratings yet came
-    // back above the highest-rated ones under "Top rated".
+    // Belt-and-braces ordering within the page. The real fix is every provider
+    // having a rating summary row (see `completeProfile`): without one the
+    // LEFT JOIN yields NULL, Postgres sorts NULLs first on DESC, and unrated
+    // providers take the whole of page one — which no amount of re-sorting
+    // after the fact can undo.
     const data =
       sortBy === "rating"
         ? [...rows].sort((a, b) => Number(b.rating) - Number(a.rating))
@@ -597,6 +635,22 @@ export class ProviderService {
    * do, and conflating the two would silently cut a provider off from work
    * they never meant to decline.
    */
+  /**
+   * Keeps an already-online provider online.
+   *
+   * Deliberately cannot turn anyone on: it only refreshes the timestamp of a
+   * provider who has already flipped the switch themselves, so a background
+   * ping can never override a provider who chose to go offline.
+   */
+  async heartbeat(userId: string) {
+    const { count } = await this.prisma.providerProfile.updateMany({
+      where: { userId, isOnline: true },
+      data: { lastOnlineAt: new Date() },
+    });
+
+    return { isOnline: count > 0 };
+  }
+
   async setOnlineStatus(userId: string, isOnline: boolean) {
     const profile = await this.prisma.providerProfile.findUnique({
       where: { userId },
@@ -662,7 +716,7 @@ export class ProviderService {
       id: user.id,
       fullName: user.fullName,
       profilePhoto: user.profilePhoto,
-      isOnline: profile.isOnline,
+      isOnline: isPresent(profile),
       bio: profile.bio,
       hourlyRate: profile.hourlyRate,
       serviceLocation: profile.serviceLocation,

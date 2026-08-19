@@ -57,6 +57,12 @@ export class ProviderController {
     return this.providerService.setOnlineStatus(userId, dto.isOnline);
   }
 
+  @Post("/profile/heartbeat")
+  @ApiOperation({ summary: "Keep an online provider's presence fresh" })
+  async heartbeat(@GetUser("sub") userId: string) {
+    return this.providerService.heartbeat(userId);
+  }
+
   @Patch("/profile")
   async updateProfile(
     @GetUser("sub") userId: string,
