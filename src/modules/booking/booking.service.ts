@@ -586,6 +586,16 @@ export class BookingService {
 
   // ─── Mark Job Completed (Provider) ───────────────────────────────────
 
+  /**
+   * Provider records their confirmation that work is completed.
+   *
+   * This does NOT trigger payment — it only records the provider's side of
+   * the dual-confirmation gate.  Payment fires automatically once the
+   * customer also confirms (or vice-versa, if the customer confirmed first).
+   *
+   * Idempotent: calling this twice for the same booking returns the same
+   * result without side-effects.
+   */
   async markJobCompleted(providerId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
@@ -614,66 +624,84 @@ export class BookingService {
       );
     }
 
-    // Mark as completed (both booking and job)
-    const result = await this.prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.booking.update({
+    // ── Idempotent: already confirmed → return current state ────────────
+    if (booking.providerConfirmedCompletion) {
+      const bothConfirmed =
+        booking.providerConfirmedCompletion &&
+        booking.customerConfirmedCompletion;
+      return {
+        message: bothConfirmed
+          ? "Both parties have already confirmed. Payment is being processed."
+          : "Provider confirmation already recorded. Waiting for customer confirmation.",
+        bookingId,
+        jobId: booking.job.id,
+        providerConfirmed: true,
+        customerConfirmed: booking.customerConfirmedCompletion,
+        paymentStatus: booking.paymentStatus,
+      };
+    }
+
+    // Record provider confirmation
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.booking.update({
         where: { id: bookingId },
         data: {
-          status: BookingStatus.COMPLETED,
-          completedAt: new Date(),
+          providerConfirmedCompletion: true,
+          providerConfirmedAt: now,
         },
       });
 
-      await tx.job.update({
-        where: { id: booking.jobId },
-        data: { status: JobStatus.COMPLETED },
-      });
-
-      // Record timeline
       await tx.jobTimeline.create({
         data: {
           jobId: booking.jobId,
-          event: "WORK_COMPLETED",
-          description: "Provider marked work as completed",
+          event: "PROVIDER_CONFIRMED_COMPLETION",
+          description: "Provider confirmed work completion",
         },
       });
-
-      // Emit placeholder for wallet module (Module 14)
-      this.logger.log({
-        message: "WALLET_EVENT: Payment pending",
-        bookingId,
-        jobId: booking.jobId,
-        customerId: booking.customerId,
-        providerId,
-        amount: booking.totalAmount.toNumber(),
-        eventType: "PAYMENT_RELEASE",
-      });
-
-      return updatedBooking;
     });
 
     this.logger.log({
-      message: "Job completed",
+      message: "Provider confirmed completion",
       bookingId,
-      jobId: booking.jobId,
+      jobId: booking.job.id,
       providerId,
     });
 
-    // Notify the customer that the job is done and needs confirmation
+    // Notify the customer
     void this.notifications.send({
       userId: booking.customerId,
-      type: NotificationType.JOB_COMPLETED,
-      title: "Job completed ✅",
-      message: "The provider marked your job as completed. Please confirm.",
+      type: NotificationType.COMPLETION_CONFIRMED,
+      title: "Provider confirmed completion ✅",
+      message:
+        "The provider confirmed the job is done. Please confirm to release payment.",
       relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
-    return result;
+    // ── If customer already confirmed, attempt payment now ──────────────
+    if (booking.customerConfirmedCompletion) {
+      return this.attemptDualConfirmPayment(booking);
+    }
+
+    return {
+      message: "Work completion confirmed by provider. Waiting for customer confirmation.",
+      bookingId,
+      jobId: booking.job.id,
+      providerConfirmed: true,
+      customerConfirmed: false,
+      paymentStatus: booking.paymentStatus,
+    };
   }
 
   // ─── Customer Confirm Completion ─────────────────────────────────────
 
+  /**
+   * Customer records their confirmation that work is completed.
+   *
+   * If the provider has also confirmed, the wallet payment is triggered
+   * immediately.  Idempotent: calling this twice returns the same result.
+   */
   async confirmCompletion(customerId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
@@ -690,77 +718,153 @@ export class BookingService {
       );
     }
 
-    if (booking.job.status !== JobStatus.COMPLETED) {
+    if (booking.status !== BookingStatus.IN_PROGRESS) {
       throw new BadRequestException(
-        "Provider must mark the job as completed first",
+        `Booking must be IN_PROGRESS to confirm completion. Current: ${booking.status.toLowerCase()}`,
       );
     }
 
-    if (booking.status !== BookingStatus.COMPLETED) {
+    if (booking.job.status !== JobStatus.IN_PROGRESS) {
       throw new BadRequestException(
-        `Booking is in ${booking.status.toLowerCase()} status`,
+        `Job must be IN_PROGRESS to confirm completion. Current: ${booking.job.status}`,
       );
     }
 
-    // Process the job payment first (Module 14): debits the customer wallet,
-    // credits the provider (net of commission) and records the platform
-    // commission — all atomically. Duplicate payments are impossible. Only
-    // once money has actually moved do we record the confirmation below —
-    // otherwise a failure here (e.g. insufficient balance) would leave the
-    // booking looking confirmed while no payment ever went through.
-    await this.wallet.processJobPayment(bookingId);
+    // ── Idempotent: already confirmed → return current state ────────────
+    if (booking.customerConfirmedCompletion) {
+      const bothConfirmed =
+        booking.providerConfirmedCompletion &&
+        booking.customerConfirmedCompletion;
+      return {
+        message: bothConfirmed
+          ? "Both parties have already confirmed. Payment is being processed."
+          : "Customer confirmation already recorded. Waiting for provider confirmation.",
+        bookingId,
+        jobId: booking.job.id,
+        providerConfirmed: booking.providerConfirmedCompletion,
+        customerConfirmed: true,
+        paymentStatus: booking.paymentStatus,
+      };
+    }
 
-    // Record confirmation timestamp (anchors the 48h dispute window)
-    await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: { confirmedAt: new Date() },
+    // Record customer confirmation
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          customerConfirmedCompletion: true,
+          customerConfirmedAt: now,
+        },
+      });
+
+      await tx.jobTimeline.create({
+        data: {
+          jobId: booking.jobId,
+          event: "CUSTOMER_CONFIRMED_COMPLETION",
+          description: "Customer confirmed work completion",
+        },
+      });
     });
-
-    // Record timeline
-    await this.recordJobTimeline(
-      booking.jobId,
-      "CUSTOMER_CONFIRMED",
-      "Customer confirmed job completion",
-    );
-
-    // Module 21 realtime: completion confirmations move several analytics
-    // metrics (revenue, provider earnings, rankings) — nudge admin dashboards.
-    void this.realtime.publishAnalyticsUpdated("job_completion_confirmed");
 
     this.logger.log({
       message: "Customer confirmed completion",
       bookingId,
-      jobId: booking.jobId,
+      jobId: booking.job.id,
       customerId,
     });
 
-    // Module 19: a confirmed completion adds to the provider's completed-job
-    // count and may move their rank (fire-and-forget, never blocks payment).
-    void this.ranking
-      .evaluateProviderRank(booking.providerId, "Job completion confirmed")
-      .catch((err) => {
-        const error = err as { message?: string };
-        this.logger.error(
-          { err: error, providerId: booking.providerId },
-          "Rank evaluation failed after job completion",
-        );
-      });
-
-    // Notify the provider that completion was confirmed
+    // Notify the provider
     void this.notifications.send({
       userId: booking.providerId,
       type: NotificationType.COMPLETION_CONFIRMED,
-      title: "Completion confirmed 🙌",
+      title: "Customer confirmed completion ✅",
       message:
-        "The customer confirmed your completed job. Payment will be released.",
+        "The customer confirmed the job is done. Payment will be released shortly.",
       relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
 
+    // ── If provider already confirmed, attempt payment now ──────────────
+    if (booking.providerConfirmedCompletion) {
+      return this.attemptDualConfirmPayment(booking);
+    }
+
     return {
-      message: "Job completion confirmed successfully",
+      message: "Work completion confirmed by customer. Waiting for provider confirmation.",
       bookingId,
+      jobId: booking.job.id,
+      providerConfirmed: false,
+      customerConfirmed: true,
+      paymentStatus: booking.paymentStatus,
+    };
+  }
+
+  // ─── Dual-confirm payment trigger ──────────────────────────────────
+
+  /**
+   * Shared helper invoked when the second party confirms and both sides
+   * are now recorded.  Delegates to the wallet service which handles
+   * sufficient / insufficient balance atomically.
+   */
+  private async attemptDualConfirmPayment(
+    booking: {
+      id: string;
+      jobId: string;
+      customerId: string;
+      providerId: string;
+      totalAmount: import("generated/prisma/client").Prisma.Decimal;
+      paymentStatus: string;
+    },
+  ) {
+    const result = await this.wallet.processJobPayment(booking.id);
+
+    if (result.success) {
+      // Record the canonical confirmation timestamp (dispute window anchor)
+      // The transaction in processJobPayment already sets completedAt, but
+      // we also want confirmedAt for the 48-hour dispute window.
+
+      // Module 21 realtime: nudge admin dashboards
+      void this.realtime.publishAnalyticsUpdated("job_completion_confirmed");
+
+      // Module 19: rank evaluation (fire-and-forget)
+      void this.ranking
+        .evaluateProviderRank(booking.providerId, "Job completion confirmed")
+        .catch((err) => {
+          const error = err as { message?: string };
+          this.logger.error(
+            { err: error, providerId: booking.providerId },
+            "Rank evaluation failed after job completion",
+          );
+        });
+
+      this.logger.log({
+        message: "Dual-confirm payment completed",
+        bookingId: booking.id,
+        jobId: booking.jobId,
+      });
+
+      return {
+        message: "Work completion confirmed by both parties. Payment completed successfully.",
+        bookingId: booking.id,
+        jobId: booking.jobId,
+        paymentStatus: "COMPLETED",
+        gross: result.gross,
+        commission: result.commission,
+        net: result.net,
+      };
+    }
+
+    // Insufficient funds — payment is PAYMENT_PENDING
+    return {
+      message:
+        "Work completion confirmed by both parties. Additional wallet funds are required before payment can be completed.",
+      bookingId: booking.id,
       jobId: booking.jobId,
+      paymentStatus: result.paymentStatus,
+      required: result.gross,
+      available: result.available,
+      additionalRequired: result.additionalRequired,
     };
   }
 

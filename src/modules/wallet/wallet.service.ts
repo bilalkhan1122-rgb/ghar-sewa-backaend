@@ -437,12 +437,20 @@ export class WalletService {
   // ─── Job Payment Processing ──────────────────────────────────────────
 
   /**
-   * Called when a customer confirms job completion. Atomically:
-   *   - debits the full amount from the customer's wallet (JOB_PAYMENT)
-   *   - credits the gross amount to the provider (PROVIDER_EARNING)
-   *   - records the platform commission (PLATFORM_COMMISSION) on the
-   *     provider wallet so the net credit equals gross − commission
-   * A unique processing key makes completed jobs impossible to pay twice.
+   * Attempt to process payment after dual completion confirmation.
+   *
+   * Called from the booking service once both provider and customer have
+   * independently confirmed that work is completed.
+   *
+   * Outcomes:
+   *  • Sufficient funds → debits customer, credits provider (net of
+   *    commission), records platform commission, marks booking COMPLETED.
+   *  • Insufficient funds → sets booking paymentStatus to PAYMENT_PENDING,
+   *    returns shortfall details so the caller can surface them.
+   *  • Already paid → idempotent no-op (ConflictException caught by caller).
+   *
+   * Uses a unique processing key per booking to prevent double payment
+   * under concurrent requests.
    */
   async processJobPayment(bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
@@ -452,9 +460,14 @@ export class WalletService {
     if (!booking) {
       throw new NotFoundException("Booking not found");
     }
-    if (booking.status !== "COMPLETED") {
+    if (!booking.providerConfirmedCompletion || !booking.customerConfirmedCompletion) {
       throw new BadRequestException(
-        `Job payments can only be processed for completed bookings (current: ${booking.status})`,
+        "Both parties must confirm completion before payment can be processed",
+      );
+    }
+    if (booking.status !== "IN_PROGRESS") {
+      throw new BadRequestException(
+        `Job payments can only be processed for in-progress bookings (current: ${booking.status})`,
       );
     }
 
@@ -469,8 +482,18 @@ export class WalletService {
     const net = gross.minus(commission);
     const paymentKey = `job-payment:${booking.id}`;
 
+    // Check for prior payment (idempotency)
+    const existingPayment = await this.prisma.walletTransaction.findFirst({
+      where: { processingKey: `${paymentKey}:customer` },
+    });
+    if (existingPayment) {
+      throw new ConflictException("This booking has already been paid");
+    }
+
+    // ── Attempt the atomic wallet transfer ──────────────────────────────
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        // Second idempotency gate inside the transaction
         const existing = await tx.walletTransaction.findFirst({
           where: { processingKey: `${paymentKey}:customer` },
         });
@@ -480,6 +503,8 @@ export class WalletService {
 
         const shortId = booking.id.slice(0, 8);
 
+        // debit will throw BadRequestException("Insufficient wallet balance")
+        // if the customer cannot cover the full amount — we catch that below.
         await this.debit(
           tx,
           customerWallet.id,
@@ -544,6 +569,24 @@ export class WalletService {
           referenceId: booking.id,
         });
 
+        // Mark booking as completed
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: {
+            status: "COMPLETED",
+            completedAt: new Date(),
+            confirmedAt: new Date(),
+            paymentStatus: "COMPLETED",
+            paymentReference: paymentKey,
+          },
+        });
+
+        // Mark job as completed
+        await tx.job.update({
+          where: { id: booking.jobId },
+          data: { status: "COMPLETED" },
+        });
+
         const [cAfter, pAfter] = await Promise.all([
           tx.wallet.findUniqueOrThrow({ where: { id: customerWallet.id } }),
           tx.wallet.findUniqueOrThrow({ where: { id: providerWallet.id } }),
@@ -584,7 +627,15 @@ export class WalletService {
         net: net.toString(),
       });
 
-      return result;
+      return {
+        success: true,
+        bookingId,
+        gross,
+        commission,
+        net,
+        customerBalanceAfter: result.customerBalanceAfter,
+        providerBalanceAfter: result.providerBalanceAfter,
+      };
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -592,8 +643,111 @@ export class WalletService {
       ) {
         throw new ConflictException("This booking has already been paid");
       }
+
+      // Insufficient wallet balance — mark PAYMENT_PENDING and return
+      // shortfall details instead of throwing.
+      if (
+        err instanceof BadRequestException &&
+        err.message === "Insufficient wallet balance"
+      ) {
+        await this.prisma.booking.update({
+          where: { id: bookingId },
+          data: {
+            paymentStatus: "PAYMENT_PENDING",
+            paymentReference: paymentKey,
+          },
+        });
+
+        const required = gross;
+        const available = customerWallet.balance;
+        const additionalRequired = required.minus(available);
+
+        void this.notifications.send({
+          userId: booking.customerId,
+          type: NotificationType.WALLET_UPDATED,
+          title: "Insufficient wallet balance ⚠️",
+          message: `Your wallet balance is Rs. ${available.toFixed(2)} but this job costs Rs. ${required.toFixed(2)}. Please add Rs. ${additionalRequired.toFixed(2)} to complete payment.`,
+          relatedEntityType: "BOOKING",
+          relatedEntityId: bookingId,
+          force: true,
+        });
+
+        void this.notifications.send({
+          userId: booking.providerId,
+          type: NotificationType.WALLET_UPDATED,
+          title: "Payment pending ⏳",
+          message: `Payment for booking #${booking.id.slice(0, 8)} is pending — the customer needs to add funds.`,
+          relatedEntityType: "BOOKING",
+          relatedEntityId: bookingId,
+        });
+
+        this.logger.log({
+          message: "Job payment pending — insufficient wallet balance",
+          bookingId,
+          required: required.toString(),
+          available: available.toString(),
+          additionalRequired: additionalRequired.toString(),
+        });
+
+        return {
+          success: false,
+          paymentStatus: "PAYMENT_PENDING" as const,
+          bookingId,
+          gross: required,
+          available: available,
+          additionalRequired: additionalRequired,
+        };
+      }
+
       throw err;
     }
+  }
+
+  // ─── Retry pending payment after wallet top-up ─────────────────────
+
+  /**
+   * Called after a customer wallet top-up is approved. Scans for any
+   * PAYMENT_PENDING bookings belonging to that customer and retries the
+   * payment if sufficient funds are now available.
+   *
+   * Returns the list of bookings that were settled.
+   */
+  async retryPendingPayments(customerId: string) {
+    const pendingBookings = await this.prisma.booking.findMany({
+      where: {
+        customerId,
+        paymentStatus: "PAYMENT_PENDING",
+      },
+    });
+
+    const settled: string[] = [];
+
+    for (const booking of pendingBookings) {
+      // Re-fetch fresh wallet balance
+      const wallet = await this.prisma.wallet.findUnique({
+        where: { userId: customerId },
+      });
+      if (!wallet) continue;
+
+      const required = booking.totalAmount;
+      if (wallet.balance.lessThan(required)) continue;
+
+      try {
+        const result = await this.processJobPayment(booking.id);
+        if (result.success) {
+          settled.push(booking.id);
+        }
+      } catch (err) {
+        // If already paid (conflict) or any other error, skip this booking
+        this.logger.warn({
+          message: "Retry pending payment failed",
+          bookingId: booking.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return { settled, total: pendingBookings.length };
   }
 
   // ─── Refund services (consumed by the dispute workflow) ──────────────

@@ -87,6 +87,19 @@ enum BookingType {
   @@map("booking_type")
 }
 
+// ─── Dual completion confirmation + wallet payment ─────────────────────
+// Payment can only be processed once BOTH the provider and the customer
+// confirm work completion.  PAYMENT_PENDING means both confirmed but the
+// customer wallet did not have enough funds at confirmation time.
+
+enum BookingPaymentStatus {
+  NONE
+  PAYMENT_PENDING
+  COMPLETED
+
+  @@map("booking_payment_status")
+}
+
 enum BookingStatus {
   // A direct booking starts here: the customer has chosen a provider, but the
   // provider has not agreed yet. Only they can move it to ACCEPTED.
@@ -617,6 +630,19 @@ model Booking {
   bookingType BookingType   @default(DIRECT)
   totalAmount Decimal       @default(0) @db.Decimal(10, 2)
 
+  // ── Dual completion confirmation ──────────────────────────────────────
+  // Both parties must independently confirm that work is completed before
+  // the wallet payment is triggered.
+  providerConfirmedCompletion Boolean   @default(false)
+  customerConfirmedCompletion Boolean   @default(false)
+  providerConfirmedAt         DateTime?
+  customerConfirmedAt         DateTime?
+
+  // Payment lifecycle — separate from booking status so we can track
+  // "both confirmed but wallet insufficient" without hiding that fact.
+  paymentStatus    BookingPaymentStatus @default(NONE)
+  paymentReference String?              @unique @db.VarChar(200)
+
   acceptedAt  DateTime?
   startedAt   DateTime?
   completedAt DateTime?
@@ -639,6 +665,7 @@ model Booking {
   @@index([providerId])
   @@index([jobId])
   @@index([status])
+  @@index([paymentStatus])
   @@map("bookings")
 }
 

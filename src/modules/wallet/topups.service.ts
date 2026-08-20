@@ -276,6 +276,17 @@ export class TopUpsService {
       reviewedBy: adminId,
     });
 
+    // After a successful top-up, check if the customer has any PAYMENT_PENDING
+    // bookings that can now be settled with the increased balance.
+    const retryResult = await this.wallet.retryPendingPayments(request.userId);
+    if (retryResult.settled.length > 0) {
+      this.logger.log({
+        message: "Pending payments settled after top-up",
+        userId: request.userId,
+        settledBookingIds: retryResult.settled,
+      });
+    }
+
     return result;
   }
 
