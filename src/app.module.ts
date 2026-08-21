@@ -46,12 +46,12 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
         // use — an admin opening a few pages, or a customer browsing the app —
         // returned 429 within seconds. This is DoS protection only; per-endpoint
         // brute-force limits live on the auth routes via @Throttle decorators.
-        limit: 300,
+        limit: 1500,
       },
       {
         name: "strict",
         ttl: 60000, // 1 minute
-        limit: 5, // 5 requests per minute for auth endpoints
+        limit: 25, // 25 requests per minute for auth endpoints
       },
     ]),
     AppConfigModule,

@@ -87,16 +87,31 @@ enum BookingType {
   @@map("booking_type")
 }
 
-/// Whether customers must fund their wallet before posting, or settle after the
-/// work is done. Controlled by the admin through PlatformSetting.
+/// Platform-wide policy: whether customers must fund their wallet before
+/// posting, or may settle after the work is done. Set by an admin through
+/// PlatformSetting. Distinct from BookingPaymentStatus below, which tracks
+/// where one particular booking's payment actually got to.
 enum PaymentMode {
   /// The wallet must cover the job before it can be posted or booked.
   PREPAID
-  /// Post and book freely; the bill falls due once the customer confirms
+  /// Post and book freely; the bill falls due once both parties confirm
   /// completion, and nothing new can be posted while it is unpaid.
   POSTPAID
 
   @@map("payment_mode")
+}
+
+// ─── Dual completion confirmation + wallet payment ─────────────────────
+// Payment can only be processed once BOTH the provider and the customer
+// confirm work completion.  PAYMENT_PENDING means both confirmed but the
+// customer wallet did not have enough funds at confirmation time.
+
+enum BookingPaymentStatus {
+  NONE
+  PAYMENT_PENDING
+  COMPLETED
+
+  @@map("booking_payment_status")
 }
 
 enum BookingStatus {
@@ -631,17 +646,28 @@ model Booking {
   bookingType BookingType   @default(DIRECT)
   totalAmount Decimal       @default(0) @db.Decimal(10, 2)
 
+  // ── Dual completion confirmation ──────────────────────────────────────
+  // Both parties must independently confirm that work is completed before
+  // the wallet payment is triggered.
+  providerConfirmedCompletion Boolean   @default(false)
+  customerConfirmedCompletion Boolean   @default(false)
+  providerConfirmedAt         DateTime?
+  customerConfirmedAt         DateTime?
+
+  // Payment lifecycle — separate from booking status so we can track
+  // "both confirmed but wallet insufficient" without hiding that fact.
+  paymentStatus    BookingPaymentStatus @default(NONE)
+  paymentReference String?              @unique @db.VarChar(200)
+
   acceptedAt  DateTime?
   startedAt   DateTime?
   completedAt DateTime?
   confirmedAt DateTime? // customer confirmed job completion (dispute window anchor)
   cancelledAt DateTime?
 
-  /// Set when the customer confirmed completion in POSTPAID mode but their
-  /// wallet could not cover the bill. Cleared the moment the payment settles,
-  /// so a non-null value is exactly "this booking is owed for".
-  paymentDueAt         DateTime?
-  /// Last reminder the cron sent, so it nags once a day rather than once a run.
+  /// Reminder bookkeeping for the payment-chasing cron. `paymentStatus`
+  /// already says whether a booking is owed for — these only record how often
+  /// we have nagged about it, so the job runs hourly without nagging hourly.
   paymentRemindedAt    DateTime?
   paymentReminderCount Int       @default(0)
 
@@ -661,8 +687,9 @@ model Booking {
   @@index([providerId])
   @@index([jobId])
   @@index([status])
-  /// Drives both the reminder cron and the "do you owe anything?" gate.
-  @@index([customerId, paymentDueAt])
+  @@index([paymentStatus])
+  /// Drives the "does this customer owe anything?" gate and the reminder cron.
+  @@index([customerId, paymentStatus])
   @@map("bookings")
 }
 

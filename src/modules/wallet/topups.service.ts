@@ -276,26 +276,30 @@ export class TopUpsService {
       reviewedBy: adminId,
     });
 
-    // Money has landed, so anything this customer owes under POSTPAID can now
-    // be paid out. Awaited rather than fired off: on Vercel a promise left
-    // running after the response is killed, and the provider would never see
-    // their money. A failure here must not fail the approval — the money is
-    // already in the wallet and the reminder cron retries — so it is logged
-    // and swallowed.
+    // Money has landed, so any booking left PAYMENT_PENDING can now be
+    // settled. Awaited rather than fired off: on Vercel a promise left running
+    // after the response is killed, and the provider would never see their
+    // money.
+    //
+    // Guarded because the top-up itself has already succeeded — the balance is
+    // in the wallet. Letting a settlement failure throw here would fail the
+    // approval the admin just made, and the reminder cron retries anyway.
     try {
-      const { count } = await this.wallet.settleDuePayments(request.userId);
-      if (count > 0) {
+      const retryResult = await this.wallet.retryPendingPayments(
+        request.userId,
+      );
+      if (retryResult.settled.length > 0) {
         this.logger.log({
-          message: "Settled outstanding bookings after top-up",
+          message: "Pending payments settled after top-up",
           userId: request.userId,
-          settled: count,
+          settledBookingIds: retryResult.settled,
         });
       }
     } catch (err) {
       const error = err as { message?: string };
       this.logger.error(
         { err: error, userId: request.userId },
-        "Could not settle outstanding payments after top-up approval",
+        "Could not settle pending payments after top-up approval",
       );
     }
 

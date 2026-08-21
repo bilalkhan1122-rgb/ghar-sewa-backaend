@@ -30,7 +30,7 @@ import { CookieOptions } from "express";
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Throttle({ strict: { ttl: 60000, limit: 3 } })
+  @Throttle({ strict: { ttl: 60000, limit: 15 } })
   @Public()
   @Post("/customer/register")
   async registerCustomer(
@@ -68,7 +68,7 @@ export class AuthController {
     };
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 3 } })
+  @Throttle({ strict: { ttl: 60000, limit: 15 } })
   @Public()
   @Post("/provider/register")
   async registerProvider(
@@ -106,7 +106,7 @@ export class AuthController {
     };
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 5 } })
+  @Throttle({ strict: { ttl: 60000, limit: 25 } })
   @Public()
   @Post("/login")
   async login(
@@ -140,7 +140,7 @@ export class AuthController {
     };
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 5 } })
+  @Throttle({ strict: { ttl: 60000, limit: 25 } })
   @Public()
   @Post("/google")
   async googleAuth(
@@ -174,28 +174,28 @@ export class AuthController {
     };
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 5 } })
+  @Throttle({ strict: { ttl: 60000, limit: 25 } })
   @Public()
   @Post("/verify-email")
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto);
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 3 } })
+  @Throttle({ strict: { ttl: 60000, limit: 15 } })
   @Public()
   @Post("/forgot-password")
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 5 } })
+  @Throttle({ strict: { ttl: 60000, limit: 25 } })
   @Public()
   @Post("/reset-password")
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
 
-  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Throttle({ default: { ttl: 60000, limit: 50 } })
   @Public()
   @UseGuards(RefreshTokenGuard)
   @Post("/refresh")
@@ -264,7 +264,7 @@ export class AuthController {
     };
   }
 
-  @Throttle({ strict: { ttl: 60000, limit: 5 } })
+  @Throttle({ strict: { ttl: 60000, limit: 25 } })
   @Post("/set-password")
   setPassword(@GetUser("sub") userId: string, @Body() dto: SetPasswordDto) {
     return this.authService.setPassword(userId, dto);

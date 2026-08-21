@@ -1,3 +1,6 @@
+-- Timestamped after 20260820000000_dual_confirm_and_payment_status on purpose:
+-- this migration's index depends on the "paymentStatus" column that one adds.
+
 -- CreateEnum
 CREATE TYPE "payment_mode" AS ENUM ('PREPAID', 'POSTPAID');
 
@@ -5,9 +8,10 @@ CREATE TYPE "payment_mode" AS ENUM ('PREPAID', 'POSTPAID');
 ALTER TYPE "notification_type" ADD VALUE 'PAYMENT_DUE';
 ALTER TYPE "notification_type" ADD VALUE 'PAYMENT_SETTLED';
 
--- AlterTable
-ALTER TABLE "bookings" ADD COLUMN     "paymentDueAt" TIMESTAMP(3),
-ADD COLUMN     "paymentRemindedAt" TIMESTAMP(3),
+-- AlterTable: reminder bookkeeping for the payment-chasing cron. Whether a
+-- booking is owed for lives in "paymentStatus"; these only record how often the
+-- customer has been nagged about it.
+ALTER TABLE "bookings" ADD COLUMN     "paymentRemindedAt" TIMESTAMP(3),
 ADD COLUMN     "paymentReminderCount" INTEGER NOT NULL DEFAULT 0;
 
 -- CreateTable
@@ -22,4 +26,4 @@ CREATE TABLE "platform_settings" (
 );
 
 -- CreateIndex
-CREATE INDEX "bookings_customerId_paymentDueAt_idx" ON "bookings"("customerId", "paymentDueAt");
+CREATE INDEX "bookings_customerId_paymentStatus_idx" ON "bookings"("customerId", "paymentStatus");
