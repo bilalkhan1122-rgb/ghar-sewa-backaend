@@ -10,6 +10,7 @@ import { DirectBookingDto } from "./dtos/direct-booking.dto";
 import { CounterBookingDto } from "./dtos/counter-booking.dto";
 import { BookingQueryDto, BookingSortField } from "./dtos/booking-query.dto";
 import { Logger } from "nestjs-pino";
+import { SettingsService } from "../settings/settings.service";
 import {
   Prisma,
   JobStatus,
@@ -21,6 +22,7 @@ import {
   VerificationStatus,
   CancellationType,
   NotificationType,
+  PaymentMode,
 } from "generated/prisma/client";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
@@ -38,6 +40,7 @@ export class BookingService {
     private readonly wallet: WalletService,
     private readonly ranking: RankingService,
     private readonly realtime: RealtimeService,
+    private readonly settings: SettingsService,
   ) {}
 
   // ─── Direct Booking ──────────────────────────────────────────────────
@@ -83,7 +86,7 @@ export class BookingService {
 
     // Same rule as a posted job — a direct booking the wallet cannot cover
     // strands the provider at payment time.
-    await this.wallet.assertCanAfford(customerId, dto.totalAmount);
+    await this.wallet.assertCanStartJob(customerId, dto.totalAmount);
 
     // Create job, booking, and timeline in transaction
     const result = await this.prisma.$transaction(async (tx) => {
@@ -345,7 +348,7 @@ export class BookingService {
     );
 
     // The new price still has to be covered, exactly as at booking time.
-    await this.wallet.assertCanAfford(customerId, bid.offeredPrice);
+    await this.wallet.assertCanStartJob(customerId, bid.offeredPrice);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.booking.update({
@@ -708,13 +711,52 @@ export class BookingService {
     // once money has actually moved do we record the confirmation below —
     // otherwise a failure here (e.g. insufficient balance) would leave the
     // booking looking confirmed while no payment ever went through.
-    await this.wallet.processJobPayment(bookingId);
+    //
+    // POSTPAID is the deliberate exception. There the customer was never asked
+    // to fund the job up front, so an empty wallet at this point is the
+    // expected path rather than an error: the confirmation stands, the bill is
+    // recorded as due, and the provider is paid by `settleDuePayments` once the
+    // money arrives.
+    const mode = await this.settings.getPaymentMode();
+    let paymentDue = false;
 
-    // Record confirmation timestamp (anchors the 48h dispute window)
+    try {
+      await this.wallet.processJobPayment(bookingId);
+    } catch (err) {
+      if (mode !== PaymentMode.POSTPAID) throw err;
+      paymentDue = true;
+      this.logger.warn({
+        message: "Confirmation recorded with payment outstanding",
+        bookingId,
+        customerId,
+        err: (err as { message?: string }).message,
+      });
+    }
+
+    // Record confirmation timestamp (anchors the 48h dispute window). The
+    // window runs from confirmation whether or not the money has moved —
+    // waiting for payment would hand a customer an unlimited dispute window
+    // simply by not topping up.
     await this.prisma.booking.update({
       where: { id: bookingId },
-      data: { confirmedAt: new Date() },
+      data: {
+        confirmedAt: new Date(),
+        ...(paymentDue ? { paymentDueAt: new Date() } : {}),
+      },
     });
+
+    if (paymentDue) {
+      void this.notifications.send({
+        userId: customerId,
+        type: NotificationType.PAYMENT_DUE,
+        title: "Payment due 💳",
+        message:
+          `Rs. ${booking.totalAmount.toString()} is due for "${booking.job.title}". ` +
+          "Top up your wallet to release the payment to your provider.",
+        relatedEntityType: "BOOKING",
+        relatedEntityId: bookingId,
+      });
+    }
 
     // Record timeline
     await this.recordJobTimeline(
@@ -746,13 +788,16 @@ export class BookingService {
         );
       });
 
-    // Notify the provider that completion was confirmed
+    // Notify the provider that completion was confirmed. Do not promise money
+    // that has not moved — under POSTPAID the customer may still owe for this.
     void this.notifications.send({
       userId: booking.providerId,
       type: NotificationType.COMPLETION_CONFIRMED,
       title: "Completion confirmed 🙌",
-      message:
-        "The customer confirmed your completed job. Payment will be released.",
+      message: paymentDue
+        ? "The customer confirmed your completed job. Payment reaches you as " +
+          "soon as they top up their wallet."
+        : "The customer confirmed your completed job. Payment will be released.",
       relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });

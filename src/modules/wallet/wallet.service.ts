@@ -10,10 +10,12 @@ import { Logger } from "nestjs-pino";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { AdminAuditService } from "src/common/services/admin-audit.service";
+import { SettingsService } from "../settings/settings.service";
 import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
 import {
   Prisma,
   UserRole,
+  PaymentMode,
   Wallet,
   WalletType,
   WalletStatus,
@@ -71,6 +73,7 @@ export class WalletService {
     private readonly logger: Logger,
     private readonly notifications: NotificationsService,
     private readonly adminAudit: AdminAuditService,
+    private readonly settings: SettingsService,
   ) {}
 
   // ─── Configuration ───────────────────────────────────────────────────
@@ -159,6 +162,118 @@ export class WalletService {
           `Top up at least ${shortfall.toFixed(2)} more and try again.`,
       );
     }
+  }
+
+  /**
+   * The gate every "can this customer commit to a job?" path goes through.
+   *
+   * PREPAID keeps the original rule: the wallet must already cover the job.
+   * POSTPAID drops that check — the point of the mode is to let people post
+   * without funding first — but refuses anyone still carrying an unpaid bill,
+   * so the platform is never exposed to more than one job's worth per customer.
+   */
+  async assertCanStartJob(
+    customerId: string,
+    amount: Prisma.Decimal | number,
+  ): Promise<void> {
+    const mode = await this.settings.getPaymentMode();
+
+    if (mode === PaymentMode.PREPAID) {
+      await this.assertCanAfford(customerId, amount);
+      return;
+    }
+
+    const wallet = await this.ensureWallet(customerId);
+    this.assertActive(wallet);
+    await this.assertNoOutstandingDues(customerId);
+  }
+
+  /**
+   * Bookings the customer has confirmed but not paid for, oldest first.
+   *
+   * `paymentDueAt` is set only when a confirmation could not be charged and is
+   * cleared the moment it settles, so a non-null value is precisely "still
+   * owed" — no need to cross-check the ledger.
+   */
+  async outstandingDues(customerId: string) {
+    const bookings = await this.prisma.booking.findMany({
+      where: { customerId, paymentDueAt: { not: null } },
+      orderBy: { paymentDueAt: "asc" },
+      select: {
+        id: true,
+        totalAmount: true,
+        paymentDueAt: true,
+        job: { select: { id: true, title: true } },
+      },
+    });
+
+    const total = bookings.reduce(
+      (sum, booking) => sum.plus(booking.totalAmount),
+      new Prisma.Decimal(0),
+    );
+
+    return { bookings, total, count: bookings.length };
+  }
+
+  async assertNoOutstandingDues(customerId: string): Promise<void> {
+    const { total, count } = await this.outstandingDues(customerId);
+    if (count === 0) return;
+
+    throw new BadRequestException(
+      `You have ${count} unpaid job${count === 1 ? "" : "s"} totalling ` +
+        `${total.toFixed(2)}. Top up your wallet to clear ${count === 1 ? "it" : "them"} ` +
+        `before posting or booking again.`,
+    );
+  }
+
+  /**
+   * Pays off whatever the customer's balance now covers, oldest bill first.
+   *
+   * Called after money lands (an approved top-up) and again from the reminder
+   * cron, which catches balances that arrived some other way — a refund, an
+   * admin adjustment. Stops at the first bill the balance cannot cover rather
+   * than skipping ahead to a cheaper one, so the queue stays fair and the
+   * provider who waited longest is paid first.
+   */
+  async settleDuePayments(customerId: string) {
+    const { bookings } = await this.outstandingDues(customerId);
+    const settled: string[] = [];
+
+    for (const booking of bookings) {
+      const wallet = await this.ensureWallet(customerId);
+      if (wallet.status !== WalletStatus.ACTIVE) break;
+      if (wallet.balance.lessThan(booking.totalAmount)) break;
+
+      try {
+        await this.processJobPayment(booking.id);
+      } catch (err) {
+        // A bill that cannot be charged right now stays due; the next top-up
+        // or cron run tries again. Never let one stuck booking block the rest.
+        const error = err as { message?: string };
+        this.logger.error(
+          { err: error, bookingId: booking.id, customerId },
+          "Could not settle a due booking payment",
+        );
+        break;
+      }
+
+      await this.prisma.booking.update({
+        where: { id: booking.id },
+        data: { paymentDueAt: null, paymentRemindedAt: null },
+      });
+      settled.push(booking.id);
+
+      void this.notifications.send({
+        userId: customerId,
+        type: NotificationType.PAYMENT_SETTLED,
+        title: "Payment cleared ✅",
+        message: `Your outstanding payment for "${booking.job.title}" has been paid.`,
+        relatedEntityType: "BOOKING",
+        relatedEntityId: booking.id,
+      });
+    }
+
+    return { settled, count: settled.length };
   }
 
   private assertActive(wallet: { status: WalletStatus }) {

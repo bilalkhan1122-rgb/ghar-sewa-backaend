@@ -87,6 +87,18 @@ enum BookingType {
   @@map("booking_type")
 }
 
+/// Whether customers must fund their wallet before posting, or settle after the
+/// work is done. Controlled by the admin through PlatformSetting.
+enum PaymentMode {
+  /// The wallet must cover the job before it can be posted or booked.
+  PREPAID
+  /// Post and book freely; the bill falls due once the customer confirms
+  /// completion, and nothing new can be posted while it is unpaid.
+  POSTPAID
+
+  @@map("payment_mode")
+}
+
 enum BookingStatus {
   // A direct booking starts here: the customer has chosen a provider, but the
   // provider has not agreed yet. Only they can move it to ACCEPTED.
@@ -190,6 +202,8 @@ enum NotificationType {
   RANK_DOWNGRADED
   URGENT_JOB_POSTED
   SYSTEM_ANNOUNCEMENT
+  PAYMENT_DUE
+  PAYMENT_SETTLED
 
   @@map("notification_type")
 }
@@ -623,6 +637,14 @@ model Booking {
   confirmedAt DateTime? // customer confirmed job completion (dispute window anchor)
   cancelledAt DateTime?
 
+  /// Set when the customer confirmed completion in POSTPAID mode but their
+  /// wallet could not cover the bill. Cleared the moment the payment settles,
+  /// so a non-null value is exactly "this booking is owed for".
+  paymentDueAt         DateTime?
+  /// Last reminder the cron sent, so it nags once a day rather than once a run.
+  paymentRemindedAt    DateTime?
+  paymentReminderCount Int       @default(0)
+
   customer User @relation("CustomerBookings", fields: [customerId], references: [id])
   provider User @relation("ProviderBookings", fields: [providerId], references: [id])
   job      Job  @relation(fields: [jobId], references: [id])
@@ -639,6 +661,8 @@ model Booking {
   @@index([providerId])
   @@index([jobId])
   @@index([status])
+  /// Drives both the reminder cron and the "do you owe anything?" gate.
+  @@index([customerId, paymentDueAt])
   @@map("bookings")
 }
 
@@ -1304,4 +1328,23 @@ model CompanyPaymentAccount {
 
   @@index([isActive, displayOrder])
   @@map("company_payment_accounts")
+}
+
+/**
+ * Platform-wide switches an admin can flip without a deploy.
+ * A single row, pinned to a fixed id so it can be read and upserted without
+ * ever having to ask which row is the current one. A table rather than an env
+ * var because payment mode changes how money moves and the admin has to be
+ * able to change it — and change it back — from the dashboard.
+ */
+model PlatformSetting {
+  /// Always "singleton". There is exactly one row.
+  id          String      @id @default("singleton")
+  paymentMode PaymentMode @default(PREPAID)
+  /// Admin user who last changed it, for the audit trail.
+  updatedById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("platform_settings")
 }

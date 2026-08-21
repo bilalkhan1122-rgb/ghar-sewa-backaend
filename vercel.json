@@ -1,10 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "public",
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
   "functions": {
     "api/index.js": {
       "includeFiles": "generated/prisma/**"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/v1/cron/payment-reminders",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

@@ -55,7 +55,7 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
   const logger = { log: jest.fn(), error: jest.fn(), warn: jest.fn() };
   // Resolves by default: the affordability rule has its own coverage, and every
   // other test here would otherwise have to fund a wallet first.
-  const wallet = { assertCanAfford: jest.fn().mockResolvedValue(undefined) };
+  const wallet = { assertCanStartJob: jest.fn().mockResolvedValue(undefined) };
 
   beforeEach(async () => {
     jest.clearAllMocks();

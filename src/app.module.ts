@@ -4,6 +4,8 @@ import { LoggerModule } from "nestjs-pino";
 import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./modules/users/users.module";
 import { CitiesModule } from "./modules/cities/cities.module";
+import { SettingsModule } from "./modules/settings/settings.module";
+import { CronModule } from "./modules/cron/cron.module";
 import { HealthModule } from "./modules/health/health.module";
 import { ProviderModule } from "./modules/provider/provider.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
@@ -53,6 +55,8 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
       },
     ]),
     AppConfigModule,
+    SettingsModule,
+    CronModule,
     AuthModule,
     UsersModule,
     CitiesModule,

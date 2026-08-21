@@ -24,6 +24,7 @@ import { CreateTopUpDto } from "./dtos/create-topup.dto";
 import { TopUpQueryDto } from "./dtos/topup-query.dto";
 import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
 import { PaymentAccountsService } from "./payment-accounts.service";
+import { SettingsService } from "../settings/settings.service";
 
 @ApiTags("Wallet (Customer)")
 @Controller("wallet")
@@ -33,6 +34,7 @@ export class CustomerWalletController {
     private readonly walletService: WalletService,
     private readonly topUpsService: TopUpsService,
     private readonly paymentAccounts: PaymentAccountsService,
+    private readonly settings: SettingsService,
   ) {}
 
   @Get("/payment-accounts")
@@ -60,6 +62,24 @@ export class CustomerWalletController {
   @ApiOperation({ summary: "View my wallet summary" })
   async getSummary(@GetUser("sub") userId: string) {
     return this.walletService.getWalletSummary(userId);
+  }
+
+  @Get("/dues")
+  @ApiOperation({
+    summary: "Payment mode and anything I still owe for completed jobs",
+  })
+  async getDues(@GetUser("sub") userId: string) {
+    const [paymentMode, dues] = await Promise.all([
+      this.settings.getPaymentMode(),
+      this.walletService.outstandingDues(userId),
+    ]);
+
+    return {
+      paymentMode,
+      total: dues.total,
+      count: dues.count,
+      bookings: dues.bookings,
+    };
   }
 
   @Get("/transactions")

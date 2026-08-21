@@ -93,9 +93,10 @@ export class JobsService {
       throw new BadRequestException("Invalid or inactive category");
     }
 
-    // A job priced above the customer's balance is refused here as well as in
-    // the app: the client-side check is a courtesy, this is the rule.
-    await this.wallet.assertCanAfford(userId, dto.offeredPrice);
+    // The client-side check is a courtesy; this is the rule. What it enforces
+    // depends on the admin's payment mode — a funded wallet under PREPAID, or
+    // simply no unpaid bills under POSTPAID.
+    await this.wallet.assertCanStartJob(userId, dto.offeredPrice);
 
     const job = await this.prisma.job.create({
       data: {

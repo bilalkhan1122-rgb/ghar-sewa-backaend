@@ -93,6 +93,8 @@ const TYPE_TO_CATEGORY: Record<NotificationType, NotificationCategory> = {
   [NotificationType.WALLET_TOPUP_APPROVED]: NotificationCategory.WALLET,
   [NotificationType.WALLET_TOPUP_REJECTED]: NotificationCategory.WALLET,
   [NotificationType.JOB_PAYMENT_COMPLETED]: NotificationCategory.WALLET,
+  [NotificationType.PAYMENT_DUE]: NotificationCategory.WALLET,
+  [NotificationType.PAYMENT_SETTLED]: NotificationCategory.WALLET,
   [NotificationType.REFUND_RECEIVED]: NotificationCategory.WALLET,
   [NotificationType.WITHDRAWAL_REQUEST_SUBMITTED]: NotificationCategory.WALLET,
   [NotificationType.WITHDRAWAL_APPROVED]: NotificationCategory.WALLET,

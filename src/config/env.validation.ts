@@ -25,6 +25,11 @@ export const envSchema = z.object({
     .regex(/^\d+[smhd]$/, "JWT_REFRESH_EXPIRY must be in format: 7d, 30d, etc.")
     .default("30d"),
 
+  /// Shared secret Vercel Cron presents as `Authorization: Bearer <secret>`.
+  /// Optional so local runs and tests boot without it — the cron endpoints
+  /// refuse every request when it is unset rather than falling open.
+  CRON_SECRET: z.string().min(16).optional(),
+
   // CORS
   CORS_ORIGIN: z
     .string()
