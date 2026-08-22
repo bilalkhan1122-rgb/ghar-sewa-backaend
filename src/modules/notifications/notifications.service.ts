@@ -177,17 +177,23 @@ export class NotificationsService {
         },
       });
 
-      // Fire-and-forget push delivery (never blocks the caller flow)
-      void this.deliver(notification.id, input.userId, {
-        title: input.title,
-        body: input.message,
-        data: {
-          type: input.type,
-          ...(input.relatedEntityId
-            ? { relatedEntityId: input.relatedEntityId }
-            : {}),
-        },
-      });
+      // Fire-and-forget push delivery (never blocks the caller flow), but
+      // keep-alived in its own right. The `keepAlive` in `send` only holds
+      // *this* method's promise, and it resolves the moment the row is
+      // written — without waiting for delivery. So on Vercel the notification
+      // was persisted and then the push was frozen out before it left.
+      void keepAlive(
+        this.deliver(notification.id, input.userId, {
+          title: input.title,
+          body: input.message,
+          data: {
+            type: input.type,
+            ...(input.relatedEntityId
+              ? { relatedEntityId: input.relatedEntityId }
+              : {}),
+          },
+        }),
+      );
 
       return notification;
     } catch (err) {
