@@ -349,15 +349,10 @@ export class JobsService {
         include: {
           category: true,
           images: true,
-          // The customer's list has to tell "the provider is still working on
-          // it" apart from "the provider says it is done and it is waiting on
-          // you" — the second is the only state where the customer has an
-          // action to take, and money moves when they take it.
-          //
-          // The confirmation flags are the only fields that distinguish them.
-          // A provider marking the work complete leaves `status` at
-          // IN_PROGRESS and both `completedAt` and `confirmedAt` null, so a
-          // list selecting only those three cannot see the difference at all.
+          // The customer's list shows "Completed" the moment the provider
+          // marks the work done, which is before the customer has confirmed
+          // it or the payment has been released. The list needs the booking's
+          // own state to tell those two apart.
           bookings: {
             where: { status: { not: BookingStatus.CANCELLED } },
             select: {
@@ -365,8 +360,6 @@ export class JobsService {
               status: true,
               completedAt: true,
               confirmedAt: true,
-              providerConfirmedCompletion: true,
-              customerConfirmedCompletion: true,
             },
             orderBy: { createdAt: "desc" },
             take: 1,
