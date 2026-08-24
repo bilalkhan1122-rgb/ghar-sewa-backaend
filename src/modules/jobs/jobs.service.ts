@@ -25,7 +25,6 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { WalletService } from "../wallet/wallet.service";
-import { hasRole } from "src/common/roles";
 
 // Module 20: urgent jobs expire in 6 hours, normal jobs in 24. The expiry
 // is always computed server-side — the client can never submit one.
@@ -468,7 +467,7 @@ export class JobsService {
 
     if (
       !provider ||
-      !hasRole(provider, UserRole.PROVIDER) ||
+      provider.role !== UserRole.PROVIDER ||
       provider.verificationStatus !== VerificationStatus.APPROVED ||
       !provider.profileCompleted ||
       !provider.isActive
@@ -528,7 +527,7 @@ export class JobsService {
       },
     });
 
-    if (!provider || !hasRole(provider, UserRole.PROVIDER)) {
+    if (!provider || provider.role !== UserRole.PROVIDER) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -1093,7 +1092,7 @@ export class JobsService {
           categoryId: job.categoryId,
           provider: {
             user: {
-              roles: { has: UserRole.PROVIDER },
+              role: UserRole.PROVIDER,
               isActive: true,
               status: UserStatus.ACTIVE,
               verificationStatus: VerificationStatus.APPROVED,

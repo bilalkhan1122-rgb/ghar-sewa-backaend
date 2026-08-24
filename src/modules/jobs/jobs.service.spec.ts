@@ -284,7 +284,6 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
     const approvedProvider = {
       id: "p1",
       role: "PROVIDER",
-      roles: ["PROVIDER"],
       verificationStatus: "APPROVED",
       profileCompleted: true,
       isActive: true,
@@ -354,7 +353,6 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
       prisma.user.findUnique.mockResolvedValue({
         id: "p1",
         role: "PROVIDER",
-        roles: ["PROVIDER"],
         verificationStatus: "APPROVED",
         profileCompleted: true,
         isActive: true,
@@ -380,7 +378,6 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
       prisma.user.findUnique.mockResolvedValue({
         id: "p1",
         role: "PROVIDER",
-        roles: ["PROVIDER"],
         verificationStatus: "APPROVED",
         profileCompleted: true,
         isActive: true,
