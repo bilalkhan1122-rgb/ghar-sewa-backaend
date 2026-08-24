@@ -12,7 +12,7 @@ import { PrismaService } from "src/prisma/prisma.service";
 import * as bcrypt from "bcryptjs";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
-import { randomBytes } from "crypto";
+import { randomBytes, randomInt } from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import {
   AuthProvider,
@@ -32,10 +32,18 @@ import { LoginDto } from "./dtos/login.dto";
 import { GoogleAuthDto } from "./dtos/google-auth.dto";
 import { VerifyEmailDto } from "./dtos/verify-email.dto";
 import { ForgotPasswordDto } from "./dtos/forgot-password.dto";
+import { VerifyResetOtpDto } from "./dtos/verify-reset-otp.dto";
 import { ResetPasswordDto } from "./dtos/reset-password.dto";
 import { SetPasswordDto } from "./dtos/set-password.dto";
 import { EmailService } from "../email/email.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { hasRole, SWITCHABLE_ROLES } from "src/common/roles";
+
+/**
+ * How long a six-digit reset code stays usable. Short on purpose — a code
+ * that short is only safe while its window is.
+ */
+const PASSWORD_RESET_OTP_TTL_MINUTES = 10;
 
 @Injectable()
 export class AuthService {
@@ -69,6 +77,8 @@ export class AuthService {
           email,
           passwordHash: hashedPassword,
           role: UserRole.CUSTOMER,
+          roles: [UserRole.CUSTOMER],
+          activeRole: UserRole.CUSTOMER,
           cityId,
           address,
           status: UserStatus.ACTIVE,
@@ -146,6 +156,8 @@ export class AuthService {
           email,
           passwordHash: hashedPassword,
           role: UserRole.PROVIDER,
+          roles: [UserRole.PROVIDER],
+          activeRole: UserRole.PROVIDER,
           cityId,
           status: UserStatus.ACTIVE,
           profileCompleted: false,
@@ -266,6 +278,171 @@ export class AuthService {
     };
   }
 
+  // ─── Dual-role accounts ───────────────────────────────────────────────
+
+  /**
+   * Switch which side of the app this account is on.
+   *
+   * No data moves and nothing is created: both profiles already exist and keep
+   * their own jobs, reviews and wallet. All this changes is `activeRole`, plus
+   * a fresh pair of tokens so the app is not carrying a stale mode around in
+   * its access token for the next quarter of an hour.
+   */
+  async switchRole(
+    userId: string,
+    role: UserRole,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ) {
+    if (!SWITCHABLE_ROLES.includes(role)) {
+      throw new BadRequestException("That role cannot be switched to.");
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      throw new NotFoundException("User not found");
+    }
+    if (!hasRole(user, role)) {
+      throw new ForbiddenException(
+        `This account is not a ${role.toLowerCase()} yet. Add the ${role.toLowerCase()} side first.`,
+      );
+    }
+
+    const updated =
+      user.activeRole === role
+        ? user
+        : await this.prisma.user.update({
+            where: { id: userId },
+            data: { activeRole: role },
+          });
+
+    const tokens = await this.issueSession(updated, deviceInfo, ipAddress);
+
+    this.logger.log({
+      message: "Role switched",
+      userId,
+      from: user.activeRole,
+      to: role,
+    });
+
+    return { user: this.sanitizeUser(updated), ...tokens };
+  }
+
+  /**
+   * Add the other role to an existing account.
+   *
+   * The person keeps one login. What the new role gets is its own profile and
+   * its own wallet — a provider's earnings and a customer's spending never
+   * share a balance — and, for a new provider, its own trip through
+   * verification: an approved customer is not an approved tradesperson, so the
+   * provider side starts unverified regardless of how long the account has
+   * existed.
+   *
+   * Idempotent: asking for a role the account already holds just switches to
+   * it, which is what a user double-tapping the button means anyway.
+   */
+  async enableRole(
+    userId: string,
+    role: UserRole,
+    deviceInfo?: string,
+    ipAddress?: string,
+  ) {
+    if (!SWITCHABLE_ROLES.includes(role)) {
+      throw new BadRequestException("That role cannot be added to an account.");
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      throw new NotFoundException("User not found");
+    }
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException(
+        "Admin accounts are managed from the web dashboard.",
+      );
+    }
+    if (hasRole(user, role)) {
+      return this.switchRole(userId, role, deviceInfo, ipAddress);
+    }
+
+    // A provider has to be reachable and locatable: customers phone them, and
+    // the job feed is scoped by city. Google sign-ups have neither until they
+    // complete their profile.
+    if (role === UserRole.PROVIDER && (!user.phone || !user.cityId)) {
+      throw new BadRequestException(
+        "Add your phone number and city before offering services.",
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.wallet.upsert({
+        where: {
+          userId_type: {
+            userId,
+            type:
+              role === UserRole.PROVIDER
+                ? WalletType.PROVIDER
+                : WalletType.CUSTOMER,
+          },
+        },
+        create: {
+          userId,
+          type:
+            role === UserRole.PROVIDER
+              ? WalletType.PROVIDER
+              : WalletType.CUSTOMER,
+        },
+        update: {},
+      });
+
+      if (role === UserRole.PROVIDER) {
+        // The profile row is what every provider screen hangs off — gallery,
+        // categories, CNIC, availability. Created empty; they fill it in.
+        await tx.providerProfile.upsert({
+          where: { userId },
+          create: { userId },
+          update: {},
+        });
+      }
+
+      return tx.user.update({
+        where: { id: userId },
+        data: {
+          roles: { push: role },
+          activeRole: role,
+          // Only the provider side is gated on verification, and only when the
+          // account has not already been through it as a provider.
+          ...(role === UserRole.PROVIDER && !hasRole(user, UserRole.PROVIDER)
+            ? {
+                verificationStatus: VerificationStatus.INCOMPLETE,
+                profileCompleted: false,
+              }
+            : {}),
+        },
+      });
+    });
+
+    const tokens = await this.issueSession(updated, deviceInfo, ipAddress);
+
+    void this.notifications.send({
+      userId,
+      type: NotificationType.WELCOME,
+      title:
+        role === UserRole.PROVIDER
+          ? "You can now offer services 🛠️"
+          : "You can now book services 🏠",
+      message:
+        role === UserRole.PROVIDER
+          ? "Complete your profile and get verified to start receiving job leads."
+          : "Post a job and find trusted service providers near you.",
+      relatedEntityType: "USER",
+      relatedEntityId: userId,
+    });
+
+    this.logger.log({ message: "Role added to account", userId, role });
+
+    return { user: this.sanitizeUser(updated), ...tokens };
+  }
+
   // ─── Google OAuth ─────────────────────────────────────────────────────
 
   /**
@@ -335,6 +512,8 @@ export class AuthService {
             phone: null,
             passwordHash: null,
             role,
+            roles: [role],
+            activeRole: role,
             cityId: null,
             status: UserStatus.ACTIVE,
             profileCompleted: role === UserRole.CUSTOMER,
@@ -418,49 +597,151 @@ export class AuthService {
   }
 
   /**
-   * Request a password reset link. Always returns the same response whether
-   * or not the account exists, so the endpoint can't be used to enumerate
-   * registered emails. Users who signed up with Google get a notice email
-   * instead of a reset link (they have no password).
+   * Look up the account a reset was requested for. The app asks for "email or
+   * phone number" in one box, so both are tried — phone first only when the
+   * value has no `@`, which is the only thing that reliably separates them.
    */
-  async forgotPassword(dto: ForgotPasswordDto) {
-    let user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+  private findUserByIdentifier(identifier: string) {
+    const value = identifier.trim();
 
-    if (!user) {
-      // Fallback for accounts registered with a mixed-case email.
-      user = await this.prisma.user.findFirst({
-        where: { email: { equals: dto.email, mode: "insensitive" } },
+    if (value.includes("@")) {
+      return this.prisma.user.findFirst({
+        where: { email: { equals: value, mode: "insensitive" } },
       });
     }
 
-    if (!user) {
-      return {
-        message:
-          "If an account exists with this email, a password reset link has been sent.",
-      };
-    }
+    // Stored numbers are E.164; a customer may well type the local form.
+    const digits = value.replace(/[^0-9]/g, "");
+    const variants = [value, digits, `+${digits}`];
+    if (digits.startsWith("0")) variants.push(`+92${digits.slice(1)}`);
+    if (digits.startsWith("92")) variants.push(`0${digits.slice(2)}`);
+
+    return this.prisma.user.findFirst({
+      where: { phone: { in: Array.from(new Set(variants)) } },
+    });
+  }
+
+  /** `bilal@gmail.com` → `bi••••@gmail.com`. */
+  private maskEmail(email: string): string {
+    const [local, domain] = email.split("@");
+    if (!domain) return "your email";
+    const head = local.slice(0, 2);
+    return `${head}${"•".repeat(Math.max(3, local.length - 2))}@${domain}`;
+  }
+
+  /**
+   * Step one of the reset: email a six-digit code.
+   *
+   * Accepts an email address or a phone number, but the code always goes to
+   * the email on the account — there is no SMS gateway wired up, and silently
+   * sending nothing would leave the user waiting on a text that never comes.
+   *
+   * The response is deliberately the same shape whether or not the account
+   * exists, so the endpoint cannot be used to discover who is registered. The
+   * masked destination is only filled in for a real account; for an unknown
+   * identifier it is null, which the app renders as generic copy.
+   */
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const generic = {
+      message:
+        "If an account matches that email or phone, a six-digit code is on its way.",
+      sentTo: null as string | null,
+      expiresInMinutes: PASSWORD_RESET_OTP_TTL_MINUTES,
+    };
+
+    const user = await this.findUserByIdentifier(dto.identifier);
+    if (!user) return generic;
 
     if (!user.passwordHash) {
-      void this.emails.sendPasswordNotSetEmail(user.email, user.fullName);
-      return {
-        message:
-          "If an account exists with this email, a password reset link has been sent.",
-      };
+      await this.emails
+        .sendPasswordNotSetEmail(user.email, user.fullName)
+        .catch(() => undefined);
+      return generic;
     }
 
-    const token = await this.createEmailToken(
+    // Only the newest code may work: leaving older ones live means a code the
+    // user already gave up on still opens the account.
+    await this.prisma.emailToken.deleteMany({
+      where: { userId: user.id, type: EmailTokenType.PASSWORD_RESET_OTP },
+    });
+
+    const otp = randomInt(0, 1_000_000).toString().padStart(6, "0");
+    await this.prisma.emailToken.create({
+      data: {
+        userId: user.id,
+        type: EmailTokenType.PASSWORD_RESET_OTP,
+        tokenHash: await this.hashData(otp),
+        expiresAt: new Date(
+          Date.now() + PASSWORD_RESET_OTP_TTL_MINUTES * 60 * 1000,
+        ),
+      },
+    });
+
+    // Awaited, not fire-and-forget: on a serverless host the function is
+    // frozen the moment the response is written, and a detached send dies
+    // with it.
+    await this.emails
+      .sendPasswordResetOtpEmail(user.email, user.fullName, otp)
+      .catch((error: unknown) => {
+        this.logger.error(
+          { userId: user.id, error },
+          "Failed to send password reset code",
+        );
+      });
+
+    return { ...generic, sentTo: this.maskEmail(user.email) };
+  }
+
+  /**
+   * Step two: check the code and hand back the token step three consumes.
+   *
+   * The code is matched only against tokens belonging to the identified
+   * account. Matching by code alone across every open request — which is what
+   * the shared token lookup does — would let a six-digit guess reset whichever
+   * stranger's account happened to hold that number.
+   */
+  async verifyResetOtp(dto: VerifyResetOtpDto) {
+    const invalid = new BadRequestException(
+      "That code is not right, or it has expired. Request a new one.",
+    );
+
+    const user = await this.findUserByIdentifier(dto.identifier);
+    if (!user) throw invalid;
+
+    const candidates = await this.prisma.emailToken.findMany({
+      where: {
+        userId: user.id,
+        type: EmailTokenType.PASSWORD_RESET_OTP,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    let matched: (typeof candidates)[number] | null = null;
+    for (const candidate of candidates) {
+      if (await bcrypt.compare(dto.otp, candidate.tokenHash)) {
+        matched = candidate;
+        break;
+      }
+    }
+    if (!matched) throw invalid;
+
+    // Atomic consume — a code is good for exactly one exchange.
+    const consumed = await this.prisma.emailToken.updateMany({
+      where: { id: matched.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count !== 1) throw invalid;
+
+    // The short-lived ticket the new password is submitted with. Long and
+    // random, so it is safe against the by-type lookup resetPassword uses.
+    const resetToken = await this.createEmailToken(
       user.id,
       EmailTokenType.PASSWORD_RESET,
       1,
     );
-    void this.emails.sendPasswordResetEmail(user.email, user.fullName, token);
 
-    return {
-      message:
-        "If an account exists with this email, a password reset link has been sent.",
-    };
+    return { message: "Code verified", resetToken };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
@@ -815,7 +1096,16 @@ export class AuthService {
   async generateTokens(
     user: User,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload = { sub: user.id, role: user.role, email: user.email };
+    // `roles` is what the guards read; `role` stays in the payload so tokens
+    // minted here are still readable by anything not yet updated, and
+    // `activeRole` tells the app which side it was last on.
+    const payload = {
+      sub: user.id,
+      role: user.role,
+      roles: user.roles,
+      activeRole: user.activeRole,
+      email: user.email,
+    };
     const accessExpiry = this.config.get<string>("JWT_ACCESS_EXPIRY") || "15m";
     const refreshExpiry = this.config.get<string>("JWT_REFRESH_EXPIRY") || "7d";
 

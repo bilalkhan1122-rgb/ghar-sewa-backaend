@@ -15,6 +15,7 @@ import {
   Prisma,
   WithdrawalStatus,
   NotificationType,
+  WalletType,
 } from "generated/prisma/client";
 
 const ACTIVE_STATUSES: WithdrawalStatus[] = [
@@ -44,7 +45,10 @@ export class WithdrawalsService {
   // ─── Provider: submit withdrawal request ─────────────────────────────
 
   async submitWithdrawal(providerId: string, dto: CreateWithdrawalDto) {
-    const wallet = await this.wallet.ensureWallet(providerId);
+    const wallet = await this.wallet.ensureWallet(
+      providerId,
+      WalletType.PROVIDER,
+    );
 
     const amount = new Prisma.Decimal(dto.amount).toDecimalPlaces(
       2,

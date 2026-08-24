@@ -15,6 +15,7 @@ import {
   VerificationStatus,
   NotificationType,
 } from "generated/prisma/client";
+import { hasRole } from "src/common/roles";
 
 /**
  * Module 11 — Provider Verification.
@@ -41,7 +42,7 @@ export class VerificationService {
       include: { providerProfile: { include: { categories: true } } },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -141,7 +142,7 @@ export class VerificationService {
       include: { providerProfile: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       return;
     }
 
@@ -467,10 +468,10 @@ export class VerificationService {
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, roles: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -482,10 +483,10 @@ export class VerificationService {
   async adminBan(adminId: string, providerId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { id: true, role: true, verificationStatus: true },
+      select: { id: true, role: true, roles: true, verificationStatus: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -523,10 +524,10 @@ export class VerificationService {
   async adminUnban(adminId: string, providerId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { id: true, role: true, verificationStatus: true },
+      select: { id: true, role: true, roles: true, verificationStatus: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 

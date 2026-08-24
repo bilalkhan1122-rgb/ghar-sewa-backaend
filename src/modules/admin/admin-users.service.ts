@@ -18,7 +18,9 @@ import {
   UserStatus,
   WalletTransactionType,
   NotificationType,
+  WalletType,
 } from "generated/prisma/client";
+import { hasRole } from "src/common/roles";
 
 /**
  * Module 17 — Admin User & Provider Management.
@@ -102,9 +104,10 @@ export class AdminUsersService {
         orderBy: { createdAt: "desc" },
         include: {
           city: { select: { id: true, name: true } },
-          wallet: {
+          wallets: {
             select: {
               id: true,
+              type: true,
               balance: true,
               heldBalance: true,
               status: true,
@@ -137,7 +140,7 @@ export class AdminUsersService {
       where: { id: userId },
       include: {
         city: true,
-        wallet: true,
+        wallets: true,
         providerProfile: {
           include: {
             categories: { include: { category: true } },
@@ -513,7 +516,7 @@ export class AdminUsersService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.UserWhereInput = {
-      role: UserRole.PROVIDER,
+      roles: { has: UserRole.PROVIDER },
       deletedAt: null,
       ...(status && { status }),
       ...(verificationStatus && { verificationStatus }),
@@ -536,8 +539,13 @@ export class AdminUsersService {
         orderBy: { createdAt: "desc" },
         include: {
           providerProfile: { select: { hourlyRate: true, cnicNumber: true } },
-          wallet: {
-            select: { balance: true, heldBalance: true, status: true },
+          wallets: {
+            select: {
+              type: true,
+              balance: true,
+              heldBalance: true,
+              status: true,
+            },
           },
           ratingSummary: {
             select: { averageRating: true, totalReviews: true },
@@ -549,7 +557,9 @@ export class AdminUsersService {
 
     const totalPages = Math.ceil(total / limit);
     return {
-      data: data.map((u) => this.sanitize(u)),
+      // A provider view: show the provider balance, not the customer one a
+      // dual-role account also has.
+      data: data.map((u) => this.sanitize(u, WalletType.PROVIDER)),
       meta: {
         total,
         page,
@@ -571,13 +581,13 @@ export class AdminUsersService {
             galleryImages: true,
           },
         },
-        wallet: true,
+        wallets: true,
         ratingSummary: true,
         verificationRequests: { orderBy: { submittedAt: "desc" } },
       },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -596,7 +606,8 @@ export class AdminUsersService {
       ]);
 
     return {
-      ...this.sanitize(user),
+      // A provider view, so `wallet` is the provider balance.
+      ...this.sanitize(user, WalletType.PROVIDER),
       stats: { completedJobs, activeBookings, cancellationCount, penaltyCount },
     };
   }
@@ -638,11 +649,15 @@ export class AdminUsersService {
   async getProviderPerformance(providerId: string) {
     const provider = await this.prisma.user.findUnique({
       where: { id: providerId },
-      include: { wallet: true, ratingSummary: true },
+      include: { wallets: true, ratingSummary: true },
     });
-    if (!provider || provider.role !== UserRole.PROVIDER) {
+    if (!provider || !hasRole(provider, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
+
+    const providerWallet = provider.wallets.find(
+      (w) => w.type === WalletType.PROVIDER,
+    );
 
     const [completedJobs, activeBookings, cancellations, penalties, earnings] =
       await Promise.all([
@@ -662,7 +677,7 @@ export class AdminUsersService {
         }),
         this.prisma.walletTransaction.aggregate({
           where: {
-            walletId: provider.wallet?.id ?? "__none__",
+            walletId: providerWallet?.id ?? "__none__",
             type: WalletTransactionType.PROVIDER_EARNING,
           },
           _sum: { amount: true },
@@ -676,8 +691,8 @@ export class AdminUsersService {
       totalReviews: provider.ratingSummary?.totalReviews ?? 0,
       jobsCompleted: completedJobs,
       activeBookings,
-      walletBalance: provider.wallet?.balance ?? new Prisma.Decimal(0),
-      heldBalance: provider.wallet?.heldBalance ?? new Prisma.Decimal(0),
+      walletBalance: providerWallet?.balance ?? new Prisma.Decimal(0),
+      heldBalance: providerWallet?.heldBalance ?? new Prisma.Decimal(0),
       lifetimeEarnings: earnings._sum.amount ?? new Prisma.Decimal(0),
       cancellationCount: cancellations,
       penalties,
@@ -688,7 +703,7 @@ export class AdminUsersService {
     const provider = await this.prisma.user.findUnique({
       where: { id: providerId },
     });
-    if (!provider || provider.role !== UserRole.PROVIDER) {
+    if (!provider || !hasRole(provider, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
     if (provider.status === UserStatus.SUSPENDED) {
@@ -728,7 +743,7 @@ export class AdminUsersService {
     const provider = await this.prisma.user.findUnique({
       where: { id: providerId },
     });
-    if (!provider || provider.role !== UserRole.PROVIDER) {
+    if (!provider || !hasRole(provider, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
     if (provider.status !== UserStatus.SUSPENDED) {
@@ -774,11 +789,28 @@ export class AdminUsersService {
     return user;
   }
 
-  private sanitize(user: User) {
+  /**
+   * Strips secrets, and keeps the single-`wallet` shape the admin screens were
+   * built against.
+   *
+   * A dual-role account has two balances: `wallets` carries both, while
+   * `wallet` stays pointed at the one for the role the account was created as
+   * — the balance those screens have always shown.
+   */
+  private sanitize<T extends User>(user: T, prefer?: WalletType) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { passwordHash, refreshToken, ...safe } = user as User & {
+    const { passwordHash, refreshToken, ...safe } = user as T & {
       refreshToken?: string | null;
     };
-    return safe;
+    const wallets = (safe as { wallets?: { type: WalletType }[] }).wallets;
+    if (!wallets) return safe;
+    const wanted =
+      prefer ??
+      (user.role === UserRole.PROVIDER
+        ? WalletType.PROVIDER
+        : WalletType.CUSTOMER);
+    const primary =
+      wallets.find((w) => w.type === wanted) ?? wallets[0] ?? null;
+    return { ...safe, wallet: primary };
   }
 }

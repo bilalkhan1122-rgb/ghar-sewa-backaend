@@ -32,6 +32,7 @@ import {
   BookingStatus,
   NotificationType,
 } from "generated/prisma/client";
+import { hasRole } from "src/common/roles";
 
 /**
  * Configurable edit window (minutes). Senders may only edit/delete
@@ -96,10 +97,10 @@ export class ChatService {
     // Provider must actually be involved in the job
     const providerUser = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, roles: true },
     });
 
-    if (!providerUser || providerUser.role !== UserRole.PROVIDER) {
+    if (!providerUser || !hasRole(providerUser, UserRole.PROVIDER)) {
       throw new BadRequestException(
         "Conversations can only be started with a provider involved in the job",
       );

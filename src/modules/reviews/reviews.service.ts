@@ -21,6 +21,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { RankingService } from "../ranking/ranking.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { hasRole } from "src/common/roles";
 
 /**
  * Configurable edit window (hours). Users may only update/delete
@@ -281,6 +282,7 @@ export class ReviewsService {
       select: {
         id: true,
         role: true,
+        roles: true,
         isActive: true,
         verificationStatus: true,
       },
@@ -288,7 +290,7 @@ export class ReviewsService {
 
     if (
       !provider ||
-      provider.role !== UserRole.PROVIDER ||
+      !hasRole(provider, UserRole.PROVIDER) ||
       !provider.isActive ||
       provider.verificationStatus !== VerificationStatus.APPROVED
     ) {
@@ -473,10 +475,10 @@ export class ReviewsService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, roles: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) return;
+    if (!user || !hasRole(user, UserRole.PROVIDER)) return;
 
     const openFlag = await this.prisma.ratingFlag.findFirst({
       where: { providerId: userId, status: RatingFlagStatus.OPEN },

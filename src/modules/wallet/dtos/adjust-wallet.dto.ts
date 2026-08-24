@@ -1,13 +1,16 @@
 import { Type } from "class-transformer";
 import {
+  IsEnum,
   IsIn,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
   MaxLength,
   Min,
 } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { WalletType } from "generated/prisma/enums";
 
 export class AdjustWalletDto {
   @ApiProperty({
@@ -31,4 +34,14 @@ export class AdjustWalletDto {
   @IsNotEmpty({ message: "Reason is required" })
   @MaxLength(500)
   reason!: string;
+
+  @ApiPropertyOptional({
+    enum: WalletType,
+    description:
+      "Which wallet to adjust. A dual-role account has one per role; " +
+      "defaults to the role the account was created as.",
+  })
+  @IsOptional()
+  @IsEnum(WalletType)
+  walletType?: WalletType;
 }

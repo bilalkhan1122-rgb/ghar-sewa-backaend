@@ -22,6 +22,7 @@ import {
   NotificationType,
   CancellationType,
 } from "generated/prisma/client";
+import { hasRole } from "src/common/roles";
 
 /** Second offence only counts inside a rolling 30-day window. */
 export const PENALTY_WINDOW_DAYS = 30;
@@ -187,10 +188,16 @@ export class PenaltiesService {
   async assertProviderEligible(providerId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { id: true, role: true, status: true, verificationStatus: true },
+      select: {
+        id: true,
+        role: true,
+        roles: true,
+        status: true,
+        verificationStatus: true,
+      },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 

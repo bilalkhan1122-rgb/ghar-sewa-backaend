@@ -25,6 +25,22 @@ import {
   DisputeResolution,
   NotificationType,
 } from "generated/prisma/client";
+import { hasRole } from "src/common/roles";
+
+/** Which role a wallet of each type belongs to. */
+export const WALLET_ROLE: Record<WalletType, UserRole> = {
+  [WalletType.CUSTOMER]: UserRole.CUSTOMER,
+  [WalletType.PROVIDER]: UserRole.PROVIDER,
+};
+
+/** The wallet a given role spends from and earns into. */
+export const ROLE_WALLET: Record<
+  typeof UserRole.CUSTOMER | typeof UserRole.PROVIDER,
+  WalletType
+> = {
+  [UserRole.CUSTOMER]: WalletType.CUSTOMER,
+  [UserRole.PROVIDER]: WalletType.PROVIDER,
+};
 
 /** Default platform commission rate (7.5%) — overridable via COMMISSION_RATE. */
 export const DEFAULT_COMMISSION_RATE = 0.075;
@@ -106,19 +122,24 @@ export class WalletService {
   // ─── Wallet creation / lookup ────────────────────────────────────────
 
   /**
-   * Every registered customer/provider automatically has a wallet. This is
-   * called on registration and lazily from every wallet entry point so
+   * Every registered customer/provider automatically has a wallet per role.
+   * This is called on registration and lazily from every wallet entry point so
    * pre-existing accounts (backfilled by migration) are always covered.
+   *
+   * `type` is always explicit: a dual-role account has two wallets and the
+   * caller is the only one that knows which side of the app it is serving.
+   * Guessing from `user.role` would send a provider's earnings into the
+   * customer wallet of anyone who signed up as a customer first.
    */
-  async ensureWallet(userId: string): Promise<Wallet> {
+  async ensureWallet(userId: string, type: WalletType): Promise<Wallet> {
     const existing = await this.prisma.wallet.findUnique({
-      where: { userId },
+      where: { userId_type: { userId, type } },
     });
     if (existing) return existing;
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, roles: true },
     });
     if (!user) {
       throw new NotFoundException("User not found");
@@ -126,16 +147,27 @@ export class WalletService {
     if (user.role === UserRole.ADMIN) {
       throw new ForbiddenException("Admins do not have wallets");
     }
-
-    const type =
-      user.role === UserRole.PROVIDER
-        ? WalletType.PROVIDER
-        : WalletType.CUSTOMER;
+    // A wallet is only created for a role the account actually holds —
+    // otherwise a stray call would quietly give a customer a provider wallet
+    // they can withdraw from.
+    if (!hasRole(user, WALLET_ROLE[type])) {
+      throw new ForbiddenException(
+        `This account is not a ${type.toLowerCase()} — no ${type.toLowerCase()} wallet exists for it.`,
+      );
+    }
 
     return this.prisma.wallet.upsert({
-      where: { userId },
+      where: { userId_type: { userId, type } },
       create: { userId, type },
       update: {},
+    });
+  }
+
+  /** Every wallet on an account, newest role last. Admin views and freezes. */
+  async walletsOf(userId: string): Promise<Wallet[]> {
+    return this.prisma.wallet.findMany({
+      where: { userId },
+      orderBy: { type: "asc" },
     });
   }
 
@@ -151,7 +183,7 @@ export class WalletService {
    * jobs already in flight, and those are settled from the same balance.
    */
   async assertCanAfford(customerId: string, amount: Prisma.Decimal | number) {
-    const wallet = await this.ensureWallet(customerId);
+    const wallet = await this.ensureWallet(customerId, WalletType.CUSTOMER);
     this.assertActive(wallet);
 
     const required = new Prisma.Decimal(amount);
@@ -184,7 +216,7 @@ export class WalletService {
       return;
     }
 
-    const wallet = await this.ensureWallet(customerId);
+    const wallet = await this.ensureWallet(customerId, WalletType.CUSTOMER);
     this.assertActive(wallet);
     await this.assertNoOutstandingDues(customerId);
   }
@@ -548,8 +580,14 @@ export class WalletService {
       );
     }
 
-    const customerWallet = await this.ensureWallet(booking.customerId);
-    const providerWallet = await this.ensureWallet(booking.providerId);
+    const customerWallet = await this.ensureWallet(
+      booking.customerId,
+      WalletType.CUSTOMER,
+    );
+    const providerWallet = await this.ensureWallet(
+      booking.providerId,
+      WalletType.PROVIDER,
+    );
 
     const gross = booking.totalAmount;
     const rate = new Prisma.Decimal(this.commissionRate);
@@ -802,7 +840,9 @@ export class WalletService {
     for (const booking of pendingBookings) {
       // Re-fetch fresh wallet balance
       const wallet = await this.prisma.wallet.findUnique({
-        where: { userId: customerId },
+        where: {
+          userId_type: { userId: customerId, type: WalletType.CUSTOMER },
+        },
       });
       if (!wallet) continue;
 
@@ -839,7 +879,7 @@ export class WalletService {
       description?: string;
     } = {},
   ) {
-    const wallet = await this.ensureWallet(userId);
+    const wallet = await this.ensureWallet(userId, WalletType.CUSTOMER);
     const tx = await this.prisma.$transaction(async (t) => {
       const row = await this.credit(
         t,
@@ -881,7 +921,7 @@ export class WalletService {
       description?: string;
     } = {},
   ) {
-    const wallet = await this.ensureWallet(providerId);
+    const wallet = await this.ensureWallet(providerId, WalletType.PROVIDER);
     const tx = await this.prisma.$transaction(async (t) => {
       const row = await this.debit(
         t,
@@ -931,8 +971,14 @@ export class WalletService {
       2,
       Prisma.Decimal.ROUND_HALF_UP,
     );
-    const customerWallet = await this.ensureWallet(params.customerId);
-    const providerWallet = await this.ensureWallet(params.providerId);
+    const customerWallet = await this.ensureWallet(
+      params.customerId,
+      WalletType.CUSTOMER,
+    );
+    const providerWallet = await this.ensureWallet(
+      params.providerId,
+      WalletType.PROVIDER,
+    );
 
     /**
      * Idempotent: if a refund already exists for this dispute (e.g. a
@@ -1057,9 +1103,20 @@ export class WalletService {
   async adjustWallet(
     adminId: string,
     userId: string,
-    dto: { direction: "credit" | "debit"; amount: number; reason: string },
+    dto: {
+      direction: "credit" | "debit";
+      amount: number;
+      reason: string;
+      walletType?: WalletType;
+    },
   ) {
-    const wallet = await this.ensureWallet(userId);
+    // Dual-role accounts have two balances, so an adjustment has to say which
+    // one it lands on. Unstated, it falls to the role the account was created
+    // as — the only wallet a single-role account has.
+    const wallet = await this.ensureWallet(
+      userId,
+      dto.walletType ?? (await this.defaultWalletType(userId)),
+    );
 
     const result = await this.prisma.$transaction(async (tx) => {
       const ledger =
@@ -1125,18 +1182,48 @@ export class WalletService {
 
   // ─── Admin: freeze / unfreeze ───────────────────────────────────────
 
-  /** Freeze a wallet: blocks all wallet operations until unfrozen. */
+  /**
+   * Freeze an account's wallets: blocks all wallet operations until unfrozen.
+   *
+   * Every wallet on the account is frozen, not just one. Freezing is an action
+   * against a person — leaving a dual-role account able to keep earning as a
+   * provider while its customer wallet is frozen would defeat the point.
+   */
   async freezeWallet(adminId: string, userId: string, reason: string) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-    });
-    if (!wallet) {
+    const wallets = await this.walletsOf(userId);
+    if (wallets.length === 0) {
       throw new NotFoundException("Wallet not found for this user");
     }
-    if (wallet.status === WalletStatus.FROZEN) {
+    const open = wallets.filter((w) => w.status !== WalletStatus.FROZEN);
+    if (open.length === 0) {
       throw new BadRequestException("Wallet is already frozen");
     }
 
+    const frozen = await Promise.all(
+      open.map((wallet) => this.freezeOne(adminId, userId, reason, wallet)),
+    );
+
+    // One notification for the account, not one per wallet — the person has a
+    // single experience of being frozen.
+    void this.notifications.send({
+      userId,
+      type: NotificationType.WALLET_UPDATED,
+      title: "Wallet frozen 🔒",
+      message: `Your wallet has been frozen. Reason: ${reason}`,
+      relatedEntityType: "WALLET",
+      relatedEntityId: frozen[0].id,
+      force: true,
+    });
+
+    return frozen;
+  }
+
+  private async freezeOne(
+    adminId: string,
+    userId: string,
+    reason: string,
+    wallet: Wallet,
+  ) {
     const updated = await this.prisma.$transaction(async (tx) => {
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
@@ -1159,15 +1246,6 @@ export class WalletService {
       newValues: { userId, reason },
     });
 
-    void this.notifications.send({
-      userId,
-      type: NotificationType.WALLET_UPDATED,
-      title: "Wallet frozen 🔒",
-      message: `Your wallet has been frozen. Reason: ${reason}`,
-      relatedEntityType: "WALLET",
-      relatedEntityId: wallet.id,
-      force: true,
-    });
     this.logger.log({
       message: "Wallet frozen by admin",
       adminId,
@@ -1178,18 +1256,41 @@ export class WalletService {
     return updated;
   }
 
-  /** Unfreeze a wallet: restores it to ACTIVE. */
+  /** Unfreeze an account's wallets: restores every frozen one to ACTIVE. */
   async unfreezeWallet(adminId: string, userId: string, reason?: string) {
-    const wallet = await this.prisma.wallet.findUnique({
-      where: { userId },
-    });
-    if (!wallet) {
+    const wallets = await this.walletsOf(userId);
+    if (wallets.length === 0) {
       throw new NotFoundException("Wallet not found for this user");
     }
-    if (wallet.status === WalletStatus.ACTIVE) {
+    const frozen = wallets.filter((w) => w.status !== WalletStatus.ACTIVE);
+    if (frozen.length === 0) {
       throw new BadRequestException("Wallet is already active");
     }
 
+    const restored = await Promise.all(
+      frozen.map((wallet) => this.unfreezeOne(adminId, userId, reason, wallet)),
+    );
+
+    // Once for the account, matching freezeWallet.
+    void this.notifications.send({
+      userId,
+      type: NotificationType.WALLET_UPDATED,
+      title: "Wallet unfrozen 🔓",
+      message: "Your wallet has been unfrozen.",
+      relatedEntityType: "WALLET",
+      relatedEntityId: restored[0].id,
+      force: true,
+    });
+
+    return restored;
+  }
+
+  private async unfreezeOne(
+    adminId: string,
+    userId: string,
+    reason: string | undefined,
+    wallet: Wallet,
+  ) {
     const updated = await this.prisma.$transaction(async (tx) => {
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
@@ -1212,15 +1313,6 @@ export class WalletService {
       newValues: { userId, reason: reason ?? null },
     });
 
-    void this.notifications.send({
-      userId,
-      type: NotificationType.WALLET_UPDATED,
-      title: "Wallet unfrozen 🔓",
-      message: "Your wallet has been unfrozen.",
-      relatedEntityType: "WALLET",
-      relatedEntityId: wallet.id,
-      force: true,
-    });
     this.logger.log({ message: "Wallet unfrozen by admin", adminId, userId });
 
     return updated;
@@ -1228,8 +1320,8 @@ export class WalletService {
 
   // ─── Summary & queries ───────────────────────────────────────────────
 
-  async getWalletSummary(userId: string) {
-    const wallet = await this.ensureWallet(userId);
+  async getWalletSummary(userId: string, type: WalletType) {
+    const wallet = await this.ensureWallet(userId, type);
 
     const [topUps, withdrawals, pendingWithdrawals] = await Promise.all([
       this.prisma.walletTransaction.aggregate({
@@ -1269,7 +1361,7 @@ export class WalletService {
   }
 
   async getEarningsSummary(providerId: string) {
-    const wallet = await this.ensureWallet(providerId);
+    const wallet = await this.ensureWallet(providerId, WalletType.PROVIDER);
 
     const monthStart = new Date(
       new Date().getFullYear(),
@@ -1343,13 +1435,21 @@ export class WalletService {
     };
   }
 
-  async listTransactions(userId: string, query: WalletTransactionQueryDto) {
-    const wallet = await this.ensureWallet(userId);
+  async listTransactions(
+    userId: string,
+    type: WalletType,
+    query: WalletTransactionQueryDto,
+  ) {
+    const wallet = await this.ensureWallet(userId, type);
     return this.queryTransactions({ walletId: wallet.id }, query);
   }
 
-  async getTransaction(userId: string, transactionId: string) {
-    const wallet = await this.ensureWallet(userId);
+  async getTransaction(
+    userId: string,
+    type: WalletType,
+    transactionId: string,
+  ) {
+    const wallet = await this.ensureWallet(userId, type);
     const transaction = await this.prisma.walletTransaction.findFirst({
       where: { id: transactionId, walletId: wallet.id },
     });
@@ -1390,6 +1490,7 @@ export class WalletService {
               email: true,
               phone: true,
               role: true,
+              roles: true,
             },
           },
         },
@@ -1415,17 +1516,48 @@ export class WalletService {
     return this.queryTransactions({}, query);
   }
 
+  /**
+   * Every wallet on an account. Returns a list because a dual-role account has
+   * two, and an admin looking at "this user's money" needs to see both.
+   */
   async adminGetWalletByUserId(userId: string) {
-    const wallet = await this.prisma.wallet.findUnique({
+    const wallets = await this.prisma.wallet.findMany({
       where: { userId },
+      orderBy: { type: "asc" },
       include: {
-        user: { select: { id: true, fullName: true, email: true, role: true } },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            role: true,
+            roles: true,
+          },
+        },
       },
     });
-    if (!wallet) {
+    if (wallets.length === 0) {
       throw new NotFoundException("Wallet not found for this user");
     }
-    return wallet;
+    return wallets;
+  }
+
+  /**
+   * The wallet an account has for certain: the one matching the role it was
+   * created as. Used where an admin action names a user but not a side.
+   */
+  private async defaultWalletType(userId: string): Promise<WalletType> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (!user) throw new NotFoundException("User not found");
+    if (user.role === UserRole.ADMIN) {
+      throw new ForbiddenException("Admins do not have wallets");
+    }
+    return user.role === UserRole.PROVIDER
+      ? WalletType.PROVIDER
+      : WalletType.CUSTOMER;
   }
 
   // ─── Shared query builder ────────────────────────────────────────────

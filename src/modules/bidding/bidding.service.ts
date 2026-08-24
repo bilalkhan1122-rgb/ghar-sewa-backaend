@@ -25,6 +25,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { hasRole } from "src/common/roles";
 
 @Injectable()
 export class BiddingService {
@@ -60,7 +61,7 @@ export class BiddingService {
       },
     });
 
-    if (!provider || provider.role !== UserRole.PROVIDER) {
+    if (!provider || !hasRole(provider, UserRole.PROVIDER)) {
       throw new ForbiddenException("Only providers can submit bids");
     }
 
@@ -1170,7 +1171,7 @@ export class BiddingService {
       },
     });
 
-    if (!provider || provider.role !== UserRole.PROVIDER) {
+    if (!provider || !hasRole(provider, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 

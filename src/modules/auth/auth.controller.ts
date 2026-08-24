@@ -19,8 +19,10 @@ import { LoginDto } from "./dtos/login.dto";
 import { GoogleAuthDto } from "./dtos/google-auth.dto";
 import { VerifyEmailDto } from "./dtos/verify-email.dto";
 import { ForgotPasswordDto } from "./dtos/forgot-password.dto";
+import { VerifyResetOtpDto } from "./dtos/verify-reset-otp.dto";
 import { ResetPasswordDto } from "./dtos/reset-password.dto";
 import { SetPasswordDto } from "./dtos/set-password.dto";
+import { SwitchRoleDto } from "./dtos/switch-role.dto";
 import { Throttle, SkipThrottle } from "@nestjs/throttler";
 import { COOKIE_CONFIG } from "src/common/constants/cookie.config";
 import { CookieOptions } from "express";
@@ -188,6 +190,17 @@ export class AuthController {
     return this.authService.forgotPassword(dto);
   }
 
+  /**
+   * Tighter than its neighbours: a six-digit code is only as safe as the rate
+   * at which it can be guessed.
+   */
+  @Throttle({ strict: { ttl: 60000, limit: 10 } })
+  @Public()
+  @Post("/verify-reset-otp")
+  verifyResetOtp(@Body() dto: VerifyResetOtpDto) {
+    return this.authService.verifyResetOtp(dto);
+  }
+
   @Throttle({ strict: { ttl: 60000, limit: 25 } })
   @Public()
   @Post("/reset-password")
@@ -274,5 +287,69 @@ export class AuthController {
   @Get("/me")
   async getMe(@GetUser("sub") userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  /**
+   * Move an existing session to the account's other side.
+   *
+   * Returns a login-shaped payload and re-sets the cookies: the tokens carry
+   * the new mode, and the old ones would otherwise keep saying "customer" for
+   * the rest of their lifetime.
+   */
+  @Throttle({ strict: { ttl: 60000, limit: 20 } })
+  @Post("/switch-role")
+  async switchRole(
+    @GetUser("sub") userId: string,
+    @Body() dto: SwitchRoleDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.authService.switchRole(
+      userId,
+      dto.role,
+      req.headers["user-agent"] || "Unknown Device",
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0] ||
+        req.ip ||
+        "Unknown IP",
+    );
+    this.setSessionCookies(res, data);
+    return data;
+  }
+
+  /** Add the other side to this account, then switch to it. */
+  @Throttle({ strict: { ttl: 60000, limit: 10 } })
+  @Post("/enable-role")
+  async enableRole(
+    @GetUser("sub") userId: string,
+    @Body() dto: SwitchRoleDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.authService.enableRole(
+      userId,
+      dto.role,
+      req.headers["user-agent"] || "Unknown Device",
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0] ||
+        req.ip ||
+        "Unknown IP",
+    );
+    this.setSessionCookies(res, data);
+    return data;
+  }
+
+  private setSessionCookies(
+    res: Response,
+    data: { accessToken: string; refreshToken: string },
+  ) {
+    res.cookie(
+      COOKIE_CONFIG.ACCESS_TOKEN.name,
+      data.accessToken,
+      COOKIE_CONFIG.ACCESS_TOKEN.options as CookieOptions,
+    );
+    res.cookie(
+      COOKIE_CONFIG.REFRESH_TOKEN.name,
+      data.refreshToken,
+      COOKIE_CONFIG.REFRESH_TOKEN.options as CookieOptions,
+    );
   }
 }

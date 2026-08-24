@@ -27,6 +27,7 @@ import { PenaltiesService } from "../penalties/penalties.service";
 import { WalletService } from "../wallet/wallet.service";
 import { RankingService } from "../ranking/ranking.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { hasRole } from "src/common/roles";
 
 @Injectable()
 export class BookingService {
@@ -55,7 +56,7 @@ export class BookingService {
 
     if (
       !provider ||
-      provider.role !== UserRole.PROVIDER ||
+      !hasRole(provider, UserRole.PROVIDER) ||
       provider.verificationStatus !== VerificationStatus.APPROVED ||
       provider.status !== UserStatus.ACTIVE ||
       !provider.profileCompleted ||

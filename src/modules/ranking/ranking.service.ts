@@ -11,6 +11,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { highestQualifyingRank, rankOrder, RANK_TIERS } from "./ranking.config";
+import { hasRole } from "src/common/roles";
 
 const RANK_LABELS: Record<ProviderRank, string> = {
   [ProviderRank.NONE]: "No rank",
@@ -55,9 +56,9 @@ export class RankingService {
   async evaluateProviderRank(providerId: string, reason?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { role: true },
+      select: { role: true, roles: true },
     });
-    if (!user || user.role !== UserRole.PROVIDER) return null;
+    if (!user || !hasRole(user, UserRole.PROVIDER)) return null;
 
     const [completedJobs, ratingSummary] = await Promise.all([
       this.prisma.booking.count({
@@ -197,7 +198,7 @@ export class RankingService {
    */
   async evaluateAllProviders(): Promise<{ evaluated: number }> {
     const providers = await this.prisma.user.findMany({
-      where: { role: UserRole.PROVIDER },
+      where: { roles: { has: UserRole.PROVIDER } },
       select: { id: true },
     });
 
@@ -233,9 +234,9 @@ export class RankingService {
   async getMyRank(providerId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: providerId },
-      select: { role: true },
+      select: { role: true, roles: true },
     });
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       return null;
     }
 
@@ -362,7 +363,7 @@ export class RankingService {
       _count: { _all: true },
     });
     const totalProviders = await this.prisma.user.count({
-      where: { role: UserRole.PROVIDER },
+      where: { roles: { has: UserRole.PROVIDER } },
     });
 
     const byRank: Record<string, number> = {};

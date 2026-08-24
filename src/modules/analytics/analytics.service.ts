@@ -153,15 +153,15 @@ export class AnalyticsService {
         },
         _sum: { amount: true },
       }),
-      this.prisma.user.count({ where: { role: UserRole.PROVIDER } }),
+      this.prisma.user.count({ where: { roles: { has: UserRole.PROVIDER } } }),
       this.prisma.user.groupBy({
         by: ["verificationStatus"],
-        where: { role: UserRole.PROVIDER },
+        where: { roles: { has: UserRole.PROVIDER } },
         _count: { _all: true },
       }),
-      this.prisma.user.count({ where: { role: UserRole.CUSTOMER } }),
+      this.prisma.user.count({ where: { roles: { has: UserRole.CUSTOMER } } }),
       this.prisma.user.count({
-        where: { role: UserRole.CUSTOMER, createdAt: range },
+        where: { roles: { has: UserRole.CUSTOMER }, createdAt: range },
       }),
       this.prisma.booking.count(),
       this.prisma.booking.count({ where: { status: BookingStatus.COMPLETED } }),
@@ -177,7 +177,7 @@ export class AnalyticsService {
       }),
       this.prisma.dispute.count({ where: { status: DisputeStatus.RESOLVED } }),
       this.prisma.ratingSummary.aggregate({
-        where: { user: { role: UserRole.PROVIDER } },
+        where: { user: { roles: { has: UserRole.PROVIDER } } },
         _avg: { averageRating: true },
       }),
     ]);
@@ -388,14 +388,14 @@ export class AnalyticsService {
       completedByProvider,
       topGroups,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { role: UserRole.PROVIDER } }),
+      this.prisma.user.count({ where: { roles: { has: UserRole.PROVIDER } } }),
       this.prisma.user.groupBy({
         by: ["verificationStatus"],
-        where: { role: UserRole.PROVIDER },
+        where: { roles: { has: UserRole.PROVIDER } },
         _count: { _all: true },
       }),
       this.prisma.ratingSummary.aggregate({
-        where: { user: { role: UserRole.PROVIDER } },
+        where: { user: { roles: { has: UserRole.PROVIDER } } },
         _avg: { averageRating: true },
       }),
       this.prisma.booking.groupBy({
@@ -478,9 +478,11 @@ export class AnalyticsService {
 
     const [totalCustomers, newCustomers, activeGroups, repeatCustomers] =
       await Promise.all([
-        this.prisma.user.count({ where: { role: UserRole.CUSTOMER } }),
         this.prisma.user.count({
-          where: { role: UserRole.CUSTOMER, createdAt: range },
+          where: { roles: { has: UserRole.CUSTOMER } },
+        }),
+        this.prisma.user.count({
+          where: { roles: { has: UserRole.CUSTOMER }, createdAt: range },
         }),
         this.prisma.booking.groupBy({
           by: ["customerId"],

@@ -17,8 +17,10 @@ import {
   UserStatus,
   VerificationStatus,
   BookingStatus,
+  WalletType,
 } from "generated/prisma/client";
 import { VerificationService } from "../verification/verification.service";
+import { hasRole } from "src/common/roles";
 
 /**
  * How long a provider keeps counting as online after their last heartbeat.
@@ -70,7 +72,7 @@ export class ProviderService {
       where: { id: userId },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -189,7 +191,7 @@ export class ProviderService {
       },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -243,7 +245,7 @@ export class ProviderService {
       include: { providerProfile: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -297,7 +299,7 @@ export class ProviderService {
       include: { providerProfile: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -322,7 +324,7 @@ export class ProviderService {
       include: { providerProfile: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -374,7 +376,7 @@ export class ProviderService {
       include: { providerProfile: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -423,7 +425,7 @@ export class ProviderService {
       include: { providerProfile: true },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -464,7 +466,7 @@ export class ProviderService {
       where: { id: userId },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -500,7 +502,7 @@ export class ProviderService {
       where: { id: userId },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -530,7 +532,7 @@ export class ProviderService {
     const sortBy = params.sortBy ?? "rating";
 
     const where: Prisma.UserWhereInput = {
-      role: UserRole.PROVIDER,
+      roles: { has: UserRole.PROVIDER },
       isActive: true,
       status: UserStatus.ACTIVE,
       verificationStatus: VerificationStatus.APPROVED,
@@ -696,7 +698,7 @@ export class ProviderService {
 
     if (
       !user ||
-      user.role !== UserRole.PROVIDER ||
+      !hasRole(user, UserRole.PROVIDER) ||
       user.status !== UserStatus.ACTIVE ||
       user.verificationStatus !== VerificationStatus.APPROVED ||
       !user.isActive
@@ -756,7 +758,10 @@ export class ProviderService {
         },
         ratingSummary: true,
         providerRanking: true,
-        wallet: {
+        // The provider wallet specifically — a dual-role account also has a
+        // customer wallet, and this is the provider dashboard.
+        wallets: {
+          where: { type: WalletType.PROVIDER },
           select: {
             balance: true,
             heldBalance: true,
@@ -766,7 +771,7 @@ export class ProviderService {
       },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 
@@ -782,6 +787,7 @@ export class ProviderService {
         };
 
     const bookingStats = await this.getProviderBookingStats(userId);
+    const providerWallet = user.wallets[0];
 
     return {
       profileCompletion: completion.percentage,
@@ -798,9 +804,9 @@ export class ProviderService {
         twoStar: user.ratingSummary?.twoStarCount ?? 0,
         oneStar: user.ratingSummary?.oneStarCount ?? 0,
       },
-      walletBalance: user.wallet?.balance ?? user.walletBalance,
-      heldBalance: user.wallet?.heldBalance ?? new Prisma.Decimal(0),
-      totalEarnings: user.wallet?.lifetimeCredits ?? user.totalSpent,
+      walletBalance: providerWallet?.balance ?? user.walletBalance,
+      heldBalance: providerWallet?.heldBalance ?? new Prisma.Decimal(0),
+      totalEarnings: providerWallet?.lifetimeCredits ?? user.totalSpent,
       categories: profile?.categories.map((pc) => pc.category) || [],
       // Module 19: provider rank
       rank: user.providerRanking?.currentRank ?? ProviderRank.NONE,
@@ -814,7 +820,7 @@ export class ProviderService {
       where: { id: userId },
     });
 
-    if (!user || user.role !== UserRole.PROVIDER) {
+    if (!user || !hasRole(user, UserRole.PROVIDER)) {
       throw new NotFoundException("Provider not found");
     }
 

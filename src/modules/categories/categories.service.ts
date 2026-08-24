@@ -101,7 +101,7 @@ export class CategoriesService {
         categoryId: { in: categories.map((c) => c.id) },
         provider: {
           user: {
-            role: UserRole.PROVIDER,
+            roles: { has: UserRole.PROVIDER },
             isActive: true,
             status: UserStatus.ACTIVE,
             verificationStatus: VerificationStatus.APPROVED,

@@ -17,6 +17,7 @@ import {
   TopUpStatus,
   WalletTransactionType,
   NotificationType,
+  WalletType,
 } from "generated/prisma/client";
 
 /**
@@ -41,7 +42,7 @@ export class TopUpsService {
     dto: CreateTopUpDto,
     file?: Express.Multer.File,
   ) {
-    const wallet = await this.wallet.ensureWallet(userId);
+    const wallet = await this.wallet.ensureWallet(userId, WalletType.CUSTOMER);
 
     const pending = await this.prisma.topUpRequest.findFirst({
       where: { userId, status: TopUpStatus.PENDING },

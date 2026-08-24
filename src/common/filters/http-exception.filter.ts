@@ -56,9 +56,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       // Generate error code from status
       code = this.getErrorCode(status, message);
-    } else if (exception instanceof Error) {
-      message = exception.message;
+    }
+
+    // Anything that is not an HttpException is a bug, not a message for the
+    // user: Prisma in particular throws with the full failing query and column
+    // names attached, and that text used to be handed straight to the app —
+    // customers were shown "The column `bookings.customerConfirmedAt` does not
+    // exist in the current database" mid-booking. The real message is logged
+    // below with the correlation id; the client gets the generic one.
+    const internalMessage =
+      exception instanceof HttpException
+        ? message
+        : exception instanceof Error
+          ? exception.message
+          : "Unknown error";
+
+    if (!(exception instanceof HttpException)) {
+      message = "Something went wrong on our side. Please try again.";
       code = "INTERNAL_SERVER_ERROR";
+      details = undefined;
     }
 
     // Log the error with correlation ID
@@ -67,13 +83,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
         correlationId,
         statusCode: status,
         errorCode: code,
-        message,
+        message: internalMessage,
         details,
         path: request.url,
         method: request.method,
         stack: exception instanceof Error ? exception.stack : undefined,
       },
-      `Error occurred: ${message}`,
+      `Error occurred: ${internalMessage}`,
     );
 
     const errorResponse: ApiResponse = {

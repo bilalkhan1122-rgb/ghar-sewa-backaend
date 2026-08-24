@@ -162,6 +162,39 @@ export class EmailService {
   }
 
   /**
+   * The six-digit code the mobile app's forgot-password flow asks for.
+   *
+   * Separate from the link email above: the app cannot receive a one-time
+   * token out of a browser, so it collects the code by hand instead.
+   */
+  async sendPasswordResetOtpEmail(
+    to: string,
+    fullName: string,
+    otp: string,
+  ): Promise<void> {
+    const firstName = fullName.split(" ")[0] || fullName;
+    await this.sendEmail(
+      to,
+      `${otp} is your Ghar Sewa password reset code`,
+      this.layout(
+        `Hi ${this.escapeHtml(firstName)},`,
+        `
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#374151;">
+          Enter this code in the Ghar Sewa app to choose a new password.
+        </p>
+        <p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:8px;color:#111827;">
+          ${this.escapeHtml(otp)}
+        </p>
+        <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#6b7280;">
+          The code expires in 10 minutes. If you didn't ask to reset your
+          password, ignore this email — your password stays unchanged.
+        </p>
+        `,
+      ),
+    );
+  }
+
+  /**
    * Sent when someone requests a password reset for an account that has no
    * password (registered via Google).
    */

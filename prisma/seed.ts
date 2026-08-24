@@ -55,6 +55,8 @@ async function main() {
       passwordHash: adminPassword,
       fullName: 'Admin User',
       role: UserRole.ADMIN,
+      roles: [UserRole.ADMIN],
+      activeRole: UserRole.ADMIN,
       cityId: 'city-lahore',
       status: UserStatus.ACTIVE,
       profileCompleted: true,
@@ -74,6 +76,8 @@ async function main() {
       passwordHash: customerPassword,
       fullName: 'Test Customer',
       role: UserRole.CUSTOMER,
+      roles: [UserRole.CUSTOMER],
+      activeRole: UserRole.CUSTOMER,
       cityId: 'city-karachi',
       address: '123 Main Street, Karachi',
       status: UserStatus.ACTIVE,
@@ -94,6 +98,8 @@ async function main() {
       passwordHash: providerPassword,
       fullName: 'Test Provider',
       role: UserRole.PROVIDER,
+      roles: [UserRole.PROVIDER],
+      activeRole: UserRole.PROVIDER,
       cityId: 'city-islamabad',
       status: UserStatus.ACTIVE,
       profileCompleted: false,
@@ -104,14 +110,18 @@ async function main() {
 
   // ─── Wallets (Module 14) ──────────────────────────────────────────────
 
-  // Every registered user automatically has a wallet.
+  // Every registered user automatically has a wallet per role they hold.
   await prisma.wallet.upsert({
-    where: { userId: customer.id },
+    where: {
+      userId_type: { userId: customer.id, type: WalletType.CUSTOMER },
+    },
     update: {},
     create: { userId: customer.id, type: WalletType.CUSTOMER },
   });
   await prisma.wallet.upsert({
-    where: { userId: provider.id },
+    where: {
+      userId_type: { userId: provider.id, type: WalletType.PROVIDER },
+    },
     update: {},
     create: { userId: provider.id, type: WalletType.PROVIDER },
   });

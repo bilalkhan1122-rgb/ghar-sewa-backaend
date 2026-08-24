@@ -53,11 +53,11 @@ export class AdminService {
       newUsersToday,
       walletTotals,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { role: UserRole.CUSTOMER } }),
-      this.prisma.user.count({ where: { role: UserRole.PROVIDER } }),
+      this.prisma.user.count({ where: { roles: { has: UserRole.CUSTOMER } } }),
+      this.prisma.user.count({ where: { roles: { has: UserRole.PROVIDER } } }),
       this.prisma.user.groupBy({
         by: ["verificationStatus"],
-        where: { role: UserRole.PROVIDER },
+        where: { roles: { has: UserRole.PROVIDER } },
         _count: { _all: true },
       }),
       this.prisma.job.groupBy({
@@ -281,7 +281,7 @@ export class AdminService {
   async reportProviders(dto: { dateFrom?: string; dateTo?: string }) {
     const dateFilter = buildDateRange(dto.dateFrom, dto.dateTo);
     const where: Prisma.UserWhereInput = {
-      role: UserRole.PROVIDER,
+      roles: { has: UserRole.PROVIDER },
       ...(dateFilter ? { createdAt: dateFilter } : {}),
     };
 
@@ -493,6 +493,7 @@ export class AdminService {
             email: true,
             phone: true,
             role: true,
+            roles: true,
             status: true,
             isActive: true,
             createdAt: true,

@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation } from "@nestjs/swagger";
 import { WalletService } from "./wallet.service";
 import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
-import { UserRole } from "generated/prisma/client";
+import { UserRole, WalletType } from "generated/prisma/client";
 import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
 
 @ApiTags("Wallet (Provider)")
@@ -15,7 +15,10 @@ export class ProviderWalletController {
   @Get("/")
   @ApiOperation({ summary: "View my wallet balance" })
   async getBalance(@GetUser("sub") userId: string) {
-    const wallet = await this.walletService.ensureWallet(userId);
+    const wallet = await this.walletService.ensureWallet(
+      userId,
+      WalletType.PROVIDER,
+    );
     return {
       walletId: wallet.id,
       type: wallet.type,
@@ -28,7 +31,7 @@ export class ProviderWalletController {
   @Get("/summary")
   @ApiOperation({ summary: "View my wallet summary" })
   async getSummary(@GetUser("sub") userId: string) {
-    return this.walletService.getWalletSummary(userId);
+    return this.walletService.getWalletSummary(userId, WalletType.PROVIDER);
   }
 
   @Get("/earnings")
@@ -46,7 +49,11 @@ export class ProviderWalletController {
     @GetUser("sub") userId: string,
     @Query() query: WalletTransactionQueryDto,
   ) {
-    return this.walletService.listTransactions(userId, query);
+    return this.walletService.listTransactions(
+      userId,
+      WalletType.PROVIDER,
+      query,
+    );
   }
 
   @Get("/transactions/:id")
@@ -55,6 +62,6 @@ export class ProviderWalletController {
     @GetUser("sub") userId: string,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    return this.walletService.getTransaction(userId, id);
+    return this.walletService.getTransaction(userId, WalletType.PROVIDER, id);
   }
 }

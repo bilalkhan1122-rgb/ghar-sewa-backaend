@@ -52,7 +52,10 @@ describe("RankingService (Module 19)", () => {
     existing?: { currentRank: ProviderRank } | null;
     duplicate?: boolean;
   }) {
-    prisma.user.findUnique.mockResolvedValue({ role: "PROVIDER" });
+    prisma.user.findUnique.mockResolvedValue({
+      role: "PROVIDER",
+      roles: ["PROVIDER"],
+    });
     prisma.booking.count.mockResolvedValue(opts.completedJobs);
     prisma.ratingSummary.findUnique.mockResolvedValue(
       rating(opts.averageRating),
@@ -78,7 +81,10 @@ describe("RankingService (Module 19)", () => {
 
   describe("evaluateProviderRank — eligibility", () => {
     it("ignores non-provider users entirely", async () => {
-      prisma.user.findUnique.mockResolvedValue({ role: "CUSTOMER" });
+      prisma.user.findUnique.mockResolvedValue({
+        role: "CUSTOMER",
+        roles: ["CUSTOMER"],
+      });
       const result = await service.evaluateProviderRank("u1");
       expect(result).toBeNull();
       expect(prisma.booking.count).not.toHaveBeenCalled();
@@ -245,7 +251,10 @@ describe("RankingService (Module 19)", () => {
 
   describe("getMyRank", () => {
     it("returns a NONE snapshot when no ranking row exists", async () => {
-      prisma.user.findUnique.mockResolvedValue({ role: "PROVIDER" });
+      prisma.user.findUnique.mockResolvedValue({
+        role: "PROVIDER",
+        roles: ["PROVIDER"],
+      });
       prisma.providerRanking.findUnique.mockResolvedValue(null);
 
       const result = await service.getMyRank("p1");
@@ -261,7 +270,10 @@ describe("RankingService (Module 19)", () => {
     });
 
     it("returns null for non-providers", async () => {
-      prisma.user.findUnique.mockResolvedValue({ role: "CUSTOMER" });
+      prisma.user.findUnique.mockResolvedValue({
+        role: "CUSTOMER",
+        roles: ["CUSTOMER"],
+      });
       expect(await service.getMyRank("c1")).toBeNull();
     });
   });
