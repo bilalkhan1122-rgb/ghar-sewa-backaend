@@ -19,6 +19,7 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
 
   const prisma = {
     serviceCategory: { findUnique: jest.fn() },
+    serviceSubcategory: { findUnique: jest.fn() },
     job: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -487,6 +488,220 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
           where: expect.objectContaining({ customerId: "c1" }),
         }),
       );
+    });
+  });
+  // ─── Sub-types within a category ───────────────────────────────────────
+
+  describe("subcategories", () => {
+    const activeCategory = { id: "cat1", isActive: true };
+    const gasRefill = {
+      id: "sub1",
+      categoryId: "cat1",
+      name: "Gas refill",
+      isActive: true,
+    };
+
+    const baseDto = {
+      categoryId: "cat1",
+      title: "AC not cooling",
+      description: "Needs a look",
+      offeredPrice: 2000,
+      address: "Kathmandu",
+      latitude: 27.7,
+      longitude: 85.3,
+    };
+
+    beforeEach(() => {
+      prisma.serviceCategory.findUnique.mockResolvedValue(activeCategory);
+      prisma.job.create.mockImplementation(mockCreateJob());
+      prisma.providerServiceCategory.findMany.mockResolvedValue([]);
+    });
+
+    describe("createJob", () => {
+      it("stores a sub-type that belongs to the category", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue(gasRefill);
+
+        await service.createJob("c1", { ...baseDto, subcategoryId: "sub1" });
+
+        expect(prisma.job.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ subcategoryId: "sub1" }),
+          }),
+        );
+      });
+
+      it("stores null when no sub-type is chosen", async () => {
+        await service.createJob("c1", baseDto);
+
+        expect(prisma.job.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ subcategoryId: null }),
+          }),
+        );
+        expect(prisma.serviceSubcategory.findUnique).not.toHaveBeenCalled();
+      });
+
+      it("rejects a sub-type belonging to a different category", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue({
+          ...gasRefill,
+          categoryId: "cat2",
+        });
+
+        await expect(
+          service.createJob("c1", { ...baseDto, subcategoryId: "sub1" }),
+        ).rejects.toThrow(/does not belong to the selected category/);
+
+        expect(prisma.job.create).not.toHaveBeenCalled();
+      });
+
+      it("rejects an inactive sub-type", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue({
+          ...gasRefill,
+          isActive: false,
+        });
+
+        await expect(
+          service.createJob("c1", { ...baseDto, subcategoryId: "sub1" }),
+        ).rejects.toThrow(/Invalid or inactive subcategory/);
+      });
+
+      it("rejects a sub-type that does not exist", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.createJob("c1", { ...baseDto, subcategoryId: "ghost" }),
+        ).rejects.toThrow(/Invalid or inactive subcategory/);
+      });
+    });
+
+    describe("updateJob", () => {
+      const pendingJob = {
+        id: "job1",
+        customerId: "c1",
+        categoryId: "cat1",
+        subcategoryId: "sub1",
+        status: "PENDING",
+        isUrgent: false,
+      };
+
+      beforeEach(() => {
+        prisma.job.findUnique.mockResolvedValue(pendingJob);
+        prisma.job.update.mockResolvedValue(pendingJob);
+      });
+
+      it("validates a new sub-type against the job's existing category", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue({
+          ...gasRefill,
+          id: "sub2",
+        });
+
+        await service.updateJob("c1", "job1", { subcategoryId: "sub2" });
+
+        expect(prisma.job.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ subcategoryId: "sub2" }),
+          }),
+        );
+      });
+
+      it("validates against the incoming category when both change", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue({
+          id: "sub9",
+          categoryId: "cat2",
+          isActive: true,
+        });
+
+        await service.updateJob("c1", "job1", {
+          categoryId: "cat2",
+          subcategoryId: "sub9",
+        });
+
+        expect(prisma.job.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              categoryId: "cat2",
+              subcategoryId: "sub9",
+            }),
+          }),
+        );
+      });
+
+      it("rejects a sub-type from the old category when the category moves", async () => {
+        prisma.serviceSubcategory.findUnique.mockResolvedValue(gasRefill);
+
+        await expect(
+          service.updateJob("c1", "job1", {
+            categoryId: "cat2",
+            subcategoryId: "sub1",
+          }),
+        ).rejects.toThrow(/does not belong to the selected category/);
+      });
+
+      it("clears a stranded sub-type when the category changes alone", async () => {
+        await service.updateJob("c1", "job1", { categoryId: "cat2" });
+
+        expect(prisma.job.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              categoryId: "cat2",
+              subcategoryId: null,
+            }),
+          }),
+        );
+      });
+
+      it("keeps the sub-type when the category is re-sent unchanged", async () => {
+        await service.updateJob("c1", "job1", { categoryId: "cat1" });
+
+        const { data } = prisma.job.update.mock.calls[0][0];
+        expect(data).not.toHaveProperty("subcategoryId");
+      });
+
+      it("clears the sub-type on an explicit null", async () => {
+        await service.updateJob("c1", "job1", { subcategoryId: null });
+
+        expect(prisma.job.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ subcategoryId: null }),
+          }),
+        );
+        expect(prisma.serviceSubcategory.findUnique).not.toHaveBeenCalled();
+      });
+
+      it("leaves the sub-type untouched when the edit is unrelated", async () => {
+        await service.updateJob("c1", "job1", { title: "New title here" });
+
+        const { data } = prisma.job.update.mock.calls[0][0];
+        expect(data).not.toHaveProperty("subcategoryId");
+      });
+    });
+
+    describe("adminListJobs", () => {
+      beforeEach(() => {
+        prisma.job.findMany.mockResolvedValue([]);
+        prisma.job.count.mockResolvedValue(0);
+      });
+
+      it("filters by sub-type when one is given", async () => {
+        await service.adminListJobs({
+          page: 1,
+          limit: 10,
+          subcategoryId: "sub1",
+        });
+
+        expect(prisma.job.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({ subcategoryId: "sub1" }),
+          }),
+        );
+      });
+
+      it("does not constrain on sub-type when none is given", async () => {
+        await service.adminListJobs({ page: 1, limit: 10 });
+
+        const { where } = prisma.job.findMany.mock.calls[0][0];
+        expect(where).not.toHaveProperty("subcategoryId");
+      });
     });
   });
 });

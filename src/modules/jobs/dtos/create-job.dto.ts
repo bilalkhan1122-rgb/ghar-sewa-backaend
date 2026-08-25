@@ -21,6 +21,16 @@ export class CreateJobDto {
   @IsUUID("4")
   categoryId: string;
 
+  @ApiPropertyOptional({
+    description:
+      "Optional sub-type within the category, e.g. 'Gas refill' under " +
+      "'AC Repair'. Must belong to `categoryId` and be active.",
+    example: "uuid-here",
+  })
+  @IsOptional()
+  @IsUUID("4")
+  subcategoryId?: string;
+
   @ApiProperty({
     description: "Job title",
     example: "Fix leaking kitchen faucet",

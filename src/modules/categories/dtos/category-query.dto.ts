@@ -42,4 +42,13 @@ export class CategoryQueryDto extends PaginationDto {
   @IsOptional()
   @Type(() => String)
   isActive?: string; // 'true' or 'false' as string from query param
+
+  @ApiPropertyOptional({
+    description:
+      "Set to 'true' to embed each category's active sub-types. Opt-in so " +
+      "existing clients keep receiving the response shape they parse today.",
+  })
+  @IsOptional()
+  @Type(() => String)
+  includeSubcategories?: string; // 'true' or 'false' as string from query param
 }

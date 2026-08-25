@@ -21,13 +21,21 @@ import { Public } from "src/common/decorators/public.decorator";
 import { UserRole } from "generated/prisma/client";
 import { PublicProvidersQueryDto } from "../provider/dtos/public-providers-query.dto";
 import { Permissions } from "src/common/decorators/permissions.decorator";
+import { SubcategoriesService } from "./subcategories.service";
+import { CreateSubcategoryDto } from "./dtos/create-subcategory.dto";
+import { UpdateSubcategoryDto } from "./dtos/update-subcategory.dto";
+import { SubcategoryQueryDto } from "./dtos/subcategory-query.dto";
+import { ReorderSubcategoriesDto } from "./dtos/reorder-subcategories.dto";
 
 // ─── Customer / Public Controller ──────────────────────────────────────
 
 @ApiTags("Categories")
 @Controller("categories")
 export class CategoriesController {
-  constructor(private readonly categoriesService: CategoriesService) {}
+  constructor(
+    private readonly categoriesService: CategoriesService,
+    private readonly subcategoriesService: SubcategoriesService,
+  ) {}
 
   @Public()
   @Get("/")
@@ -48,6 +56,15 @@ export class CategoriesController {
   @ApiOperation({ summary: "Get a single category by slug" })
   async getCategoryBySlug(@Param("slug") slug: string) {
     return this.categoriesService.getCategoryBySlug(slug);
+  }
+
+  // Two path segments, so it is not shadowed by the single-segment `/:slug`
+  // route above — same reason `/:id/providers` sits here safely.
+  @Public()
+  @Get("/:id/subcategories")
+  @ApiOperation({ summary: "List the active sub-types of a category" })
+  async getCategorySubcategories(@Param("id", ParseUUIDPipe) id: string) {
+    return this.subcategoriesService.listActiveSubcategories(id);
   }
 
   @Public()
@@ -115,7 +132,10 @@ export class ProviderCategoriesController {
 @Roles(UserRole.ADMIN)
 @Permissions("categories.view")
 export class AdminCategoriesController {
-  constructor(private readonly categoriesService: CategoriesService) {}
+  constructor(
+    private readonly categoriesService: CategoriesService,
+    private readonly subcategoriesService: SubcategoriesService,
+  ) {}
 
   @Get("/")
   @ApiOperation({ summary: "List all categories (admin)" })
@@ -165,5 +185,85 @@ export class AdminCategoriesController {
   @ApiOperation({ summary: "Get category statistics" })
   async getCategoryStats(@Param("id", ParseUUIDPipe) id: string) {
     return this.categoriesService.getCategoryStats(id);
+  }
+
+  // ─── Subcategories of one category ─────────────────────────────────
+
+  @Get("/:id/subcategories")
+  @ApiOperation({
+    summary: "List every sub-type of a category, hidden included",
+  })
+  async listSubcategories(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Query() query: SubcategoryQueryDto,
+  ) {
+    return this.subcategoriesService.adminListSubcategories(id, query);
+  }
+
+  @Permissions("categories.manage")
+  @Post("/:id/subcategories")
+  @ApiOperation({ summary: "Add a sub-type to a category" })
+  async createSubcategory(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CreateSubcategoryDto,
+  ) {
+    return this.subcategoriesService.createSubcategory(id, dto);
+  }
+
+  @Permissions("categories.manage")
+  @Post("/:id/subcategories/reorder")
+  @ApiOperation({ summary: "Reorder the sub-types within a category" })
+  async reorderSubcategories(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: ReorderSubcategoriesDto,
+  ) {
+    return this.subcategoriesService.reorderSubcategories(id, dto);
+  }
+}
+
+// ─── Admin Subcategory Controller ──────────────────────────────────────
+
+/**
+ * Operations on a subcategory by its own id. Split from the routes above
+ * because they do not need the parent in the path — and moving a sub-type
+ * between categories would make a parent segment misleading.
+ */
+@ApiTags("Admin Categories")
+@Controller("admin/subcategories")
+@Roles(UserRole.ADMIN)
+@Permissions("categories.view")
+export class AdminSubcategoriesController {
+  constructor(private readonly subcategoriesService: SubcategoriesService) {}
+
+  @Permissions("categories.manage")
+  @Patch("/:id")
+  @ApiOperation({ summary: "Update a subcategory" })
+  async updateSubcategory(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSubcategoryDto,
+  ) {
+    return this.subcategoriesService.updateSubcategory(id, dto);
+  }
+
+  @Permissions("categories.manage")
+  @Patch("/:id/status")
+  @ApiOperation({ summary: "Show or hide a subcategory" })
+  async toggleSubcategoryStatus(@Param("id", ParseUUIDPipe) id: string) {
+    return this.subcategoriesService.toggleSubcategoryStatus(id);
+  }
+
+  @Permissions("categories.manage")
+  @Delete("/:id")
+  @ApiOperation({
+    summary: "Delete a subcategory, or hide it if jobs already reference it",
+  })
+  async deleteSubcategory(@Param("id", ParseUUIDPipe) id: string) {
+    return this.subcategoriesService.deleteSubcategory(id);
+  }
+
+  @Get("/:id/stats")
+  @ApiOperation({ summary: "Get subcategory statistics" })
+  async getSubcategoryStats(@Param("id", ParseUUIDPipe) id: string) {
+    return this.subcategoriesService.getSubcategoryStats(id);
   }
 }

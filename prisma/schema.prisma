@@ -591,12 +591,43 @@ model ServiceCategory {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  providers ProviderServiceCategory[]
-  jobs      Job[]
+  providers     ProviderServiceCategory[]
+  jobs          Job[]
+  subcategories ServiceSubcategory[]
 
   @@index([slug])
   @@index([isActive, displayOrder])
   @@map("service_categories")
+}
+
+/// The specific job inside a category — "Gas refill" under "AC Repair".
+///
+/// A separate table rather than a self-relation on ServiceCategory on purpose:
+/// every existing "list the categories" query keeps returning exactly what it
+/// returned before, so the customer app and the provider feed are unaffected
+/// until they opt in. `Job.subcategoryId` is nullable for the same reason —
+/// jobs posted before this existed, and clients that do not send one yet, stay
+/// valid.
+model ServiceSubcategory {
+  id           String   @id @default(uuid())
+  categoryId   String
+  name         String   @db.VarChar(100)
+  /// Unique within the parent category, not globally: "Installation" is a
+  /// reasonable subcategory of both AC Repair and Solar.
+  slug         String   @db.VarChar(100)
+  description  String?  @db.VarChar(500)
+  icon         String?  @db.VarChar(255)
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  jobs     Job[]
+
+  @@unique([categoryId, slug])
+  @@index([categoryId, isActive, displayOrder])
+  @@map("service_subcategories")
 }
 
 model ProviderProfile {
@@ -710,6 +741,10 @@ model Job {
   id                String    @id @default(uuid())
   customerId        String
   categoryId        String
+  /// Optional refinement of `categoryId`. Nullable because it post-dates every
+  /// job already in the table, and because a customer who does not know which
+  /// sub-type they need should still be able to post.
+  subcategoryId     String?
   title             String    @db.VarChar(200)
   description       String    @db.Text
   address           String    @db.VarChar(500)
@@ -729,6 +764,7 @@ model Job {
 
   customer      User                 @relation("CustomerJobs", fields: [customerId], references: [id])
   category      ServiceCategory      @relation(fields: [categoryId], references: [id])
+  subcategory   ServiceSubcategory?  @relation(fields: [subcategoryId], references: [id], onDelete: Restrict)
   images        JobImage[]
   bids          Bid[]
   bookings      Booking[]
@@ -740,6 +776,7 @@ model Job {
 
   @@index([customerId])
   @@index([categoryId])
+  @@index([subcategoryId])
   @@index([status])
   @@index([expiresAt])
   @@index([status, categoryId, expiresAt])

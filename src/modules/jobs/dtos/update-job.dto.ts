@@ -8,6 +8,7 @@ import {
   Max,
   IsUUID,
   IsISO8601,
+  ValidateIf,
 } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
@@ -20,6 +21,19 @@ export class UpdateJobDto {
   @IsOptional()
   @IsUUID("4")
   categoryId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Sub-type within the category. Send null to clear it. Changing " +
+      "`categoryId` without sending one clears it, since a sub-type belongs " +
+      "to exactly one category.",
+    example: "uuid-here",
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID("4")
+  subcategoryId?: string | null;
 
   @ApiPropertyOptional({
     description: "Job title",

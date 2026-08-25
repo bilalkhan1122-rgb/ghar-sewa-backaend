@@ -33,6 +33,13 @@ export class JobQueryDto extends PaginationDto {
   categoryId?: string;
 
   @ApiPropertyOptional({
+    description: "Filter by sub-type ID within a category",
+  })
+  @IsOptional()
+  @IsString()
+  subcategoryId?: string;
+
+  @ApiPropertyOptional({
     description: "Filter by minimum offered price",
     example: 500,
   })

@@ -64,6 +64,7 @@ export class CategoriesService {
       search,
       sortBy = CategorySortField.DISPLAY_ORDER,
       sortOrder = "asc",
+      includeSubcategories,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -82,12 +83,28 @@ export class CategoriesService {
           ? "createdAt"
           : "displayOrder";
 
+    // Embedding is opt-in: the app's home grid does not need the sub-types to
+    // draw the tiles, and pulling them for every category on every load would
+    // be a much larger payload for nothing.
+    const embedSubcategories = includeSubcategories === "true";
+
     const [categories, total] = await Promise.all([
       this.prisma.serviceCategory.findMany({
         where,
         skip,
         take: limit,
         orderBy: { [orderByField]: sortOrder },
+        ...(embedSubcategories && {
+          include: {
+            subcategories: {
+              where: { isActive: true },
+              orderBy: [
+                { displayOrder: "asc" as const },
+                { name: "asc" as const },
+              ],
+            },
+          },
+        }),
       }),
       this.prisma.serviceCategory.count({ where }),
     ]);
@@ -499,6 +516,17 @@ export class CategoriesService {
         skip,
         take: limit,
         orderBy: { [orderByField]: sortOrder },
+        // Always embedded, and hidden ones included — the admin screen manages
+        // sub-types inline, so fetching them per row would be one request per
+        // category on every load.
+        include: {
+          subcategories: {
+            orderBy: [
+              { displayOrder: "asc" as const },
+              { name: "asc" as const },
+            ],
+          },
+        },
       }),
       this.prisma.serviceCategory.count({ where }),
     ]);

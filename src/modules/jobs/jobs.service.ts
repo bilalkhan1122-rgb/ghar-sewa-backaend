@@ -83,6 +83,34 @@ export class JobsService {
     return where;
   }
 
+  /**
+   * Checks a sub-type is real, active, and actually belongs to the category
+   * the job is being filed under.
+   *
+   * The parent check is the important one: a sub-type id from a *different*
+   * category passes a bare existence check and would quietly file the job as,
+   * say, "AC Repair / Solar panel cleaning" — matching providers on one thing
+   * and telling them another.
+   */
+  private async assertSubcategoryBelongsToCategory(
+    categoryId: string,
+    subcategoryId: string,
+  ): Promise<void> {
+    const subcategory = await this.prisma.serviceSubcategory.findUnique({
+      where: { id: subcategoryId },
+    });
+
+    if (!subcategory || !subcategory.isActive) {
+      throw new BadRequestException("Invalid or inactive subcategory");
+    }
+
+    if (subcategory.categoryId !== categoryId) {
+      throw new BadRequestException(
+        "The subcategory does not belong to the selected category",
+      );
+    }
+  }
+
   // ─── Customer: Create Job ────────────────────────────────────────────
 
   async createJob(userId: string, dto: CreateJobDto) {
@@ -94,6 +122,13 @@ export class JobsService {
       throw new BadRequestException("Invalid or inactive category");
     }
 
+    if (dto.subcategoryId) {
+      await this.assertSubcategoryBelongsToCategory(
+        dto.categoryId,
+        dto.subcategoryId,
+      );
+    }
+
     // The client-side check is a courtesy; this is the rule. What it enforces
     // depends on the admin's payment mode — a funded wallet under PREPAID, or
     // simply no unpaid bills under POSTPAID.
@@ -103,6 +138,7 @@ export class JobsService {
       data: {
         customerId: userId,
         categoryId: dto.categoryId,
+        subcategoryId: dto.subcategoryId ?? null,
         title: dto.title,
         description: dto.description,
         address: dto.address,
@@ -121,6 +157,7 @@ export class JobsService {
       },
       include: {
         category: true,
+        subcategory: true,
         images: true,
       },
     });
@@ -180,10 +217,33 @@ export class JobsService {
       }
     }
 
+    // A sub-type belongs to exactly one category, so it is validated against
+    // wherever the job is *ending up*, not where it started.
+    const effectiveCategoryId = dto.categoryId ?? job.categoryId;
+    if (dto.subcategoryId) {
+      await this.assertSubcategoryBelongsToCategory(
+        effectiveCategoryId,
+        dto.subcategoryId,
+      );
+    }
+
+    // Moving a job to another category strands whatever sub-type it had, so
+    // clear it rather than leave the job pointing at a sub-type of a category
+    // it is no longer in. An explicit value above takes precedence.
+    const movedCategories =
+      dto.categoryId !== undefined && dto.categoryId !== job.categoryId;
+    const subcategoryId =
+      dto.subcategoryId !== undefined
+        ? dto.subcategoryId
+        : movedCategories
+          ? null
+          : undefined;
+
     const updated = await this.prisma.job.update({
       where: { id: jobId },
       data: {
         ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+        ...(subcategoryId !== undefined && { subcategoryId }),
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.address !== undefined && { address: dto.address }),
@@ -202,6 +262,7 @@ export class JobsService {
       },
       include: {
         category: true,
+        subcategory: true,
         images: true,
       },
     });
@@ -271,7 +332,7 @@ export class JobsService {
     const updated = await this.prisma.job.update({
       where: { id: jobId },
       data: { status: JobStatus.CANCELLED },
-      include: { category: true, images: true },
+      include: { category: true, subcategory: true, images: true },
     });
 
     // Notify the customer that their job was cancelled
@@ -313,7 +374,7 @@ export class JobsService {
         // An urgent job stays urgent when reposted (same 6h window).
         expiresAt: this.calculateExpiry(job.isUrgent),
       },
-      include: { category: true, images: true },
+      include: { category: true, subcategory: true, images: true },
     });
 
     this.logger.log({
@@ -349,6 +410,7 @@ export class JobsService {
         orderBy: { [orderByField]: sortOrder },
         include: {
           category: true,
+          subcategory: true,
           images: true,
           // The customer's list has to tell "the provider is still working on
           // it" apart from "the provider says it is done and it is waiting on
@@ -399,6 +461,7 @@ export class JobsService {
       where: { id: jobId },
       include: {
         category: true,
+        subcategory: true,
         images: true,
         customer: {
           select: {
@@ -439,6 +502,7 @@ export class JobsService {
       where: { id: jobId },
       include: {
         category: true,
+        subcategory: true,
         images: true,
         customer: {
           select: {
@@ -618,6 +682,7 @@ export class JobsService {
         orderBy,
         include: {
           category: true,
+          subcategory: true,
           images: true,
           customer: {
             select: {
@@ -752,6 +817,7 @@ export class JobsService {
       limit = 10,
       status,
       categoryId,
+      subcategoryId,
       minPrice,
       maxPrice,
       search,
@@ -769,6 +835,7 @@ export class JobsService {
     const where: Prisma.JobWhereInput = {};
     if (status) where.status = status as JobStatus;
     if (categoryId) where.categoryId = categoryId;
+    if (subcategoryId) where.subcategoryId = subcategoryId;
     if (query.isUrgent !== undefined) where.isUrgent = query.isUrgent;
     if (search) {
       where.OR = [
@@ -804,6 +871,7 @@ export class JobsService {
         orderBy: { [orderByField]: sortOrder },
         include: {
           category: true,
+          subcategory: true,
           images: true,
           customer: {
             select: {
@@ -839,6 +907,7 @@ export class JobsService {
       where: { id: jobId },
       include: {
         category: true,
+        subcategory: true,
         images: true,
         customer: {
           select: { id: true, fullName: true, phone: true, email: true },
