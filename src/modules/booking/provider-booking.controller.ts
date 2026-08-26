@@ -55,6 +55,17 @@ export class ProviderBookingController {
 
   // ─── Job Tracking ────────────────────────────────────────────────────
 
+  @Get("/jobs/:jobId/booking")
+  @ApiOperation({
+    summary: "Resolve a job id to your booking on it (null when there is none)",
+  })
+  async getBookingForJob(
+    @GetUser("sub") userId: string,
+    @Param("jobId", ParseUUIDPipe) jobId: string,
+  ) {
+    return this.bookingService.findBookingForJob(userId, jobId);
+  }
+
   @Get("/jobs/:jobId/timeline")
   @ApiOperation({ summary: "View full job tracking timeline" })
   async getJobTimeline(

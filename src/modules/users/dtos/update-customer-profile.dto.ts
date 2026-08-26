@@ -35,14 +35,15 @@ export class UpdateCustomerProfileDto {
   cityId?: string;
 
   @ApiPropertyOptional({
-    description: "Street address",
+    description:
+      "Street address. Minimum 5, matching CreateJobDto — an address that cannot be used to post a job is not worth storing.",
     example: "123 Main Street, Lahore",
-    minLength: 3,
+    minLength: 5,
     maxLength: 500,
   })
   @IsOptional()
   @IsString()
-  @MinLength(3)
+  @MinLength(5)
   @MaxLength(500)
   address?: string;
 }

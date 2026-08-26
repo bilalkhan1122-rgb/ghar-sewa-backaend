@@ -1285,6 +1285,37 @@ export class BookingService {
     return booking;
   }
 
+  /**
+   * The caller's live booking for a job, or null.
+   *
+   * Notifications about bids and jobs carry a *job* id, while both apps key
+   * their job screens by *booking* id — so tapping "your offer was accepted"
+   * used to dump the provider on the feed, which no longer lists the job they
+   * just won ("No jobs available in your categories right now"). This is the
+   * lookup that turns one id into the other.
+   *
+   * Returns null rather than 404 when there is simply no booking yet: an open
+   * job with no accepted bid is a perfectly ordinary answer.
+   */
+  async findBookingForJob(userId: string, jobId: string) {
+    const booking = await this.prisma.booking.findFirst({
+      where: {
+        jobId,
+        OR: [{ customerId: userId }, { providerId: userId }],
+      },
+      // Newest first, and never resurrect a cancelled booking over a live one.
+      orderBy: [
+        { cancelledAt: { sort: "asc", nulls: "first" } },
+        { createdAt: "desc" },
+      ],
+      select: { id: true },
+    });
+
+    if (!booking) return { bookingId: null };
+
+    return { bookingId: booking.id };
+  }
+
   // ─── Job Timeline Tracking ───────────────────────────────────────────
 
   async getJobTimeline(userId: string, jobId: string) {
@@ -1712,7 +1743,9 @@ export class BookingService {
         events["PROVIDER_ASSIGNED"] || events["PROVIDER_ACCEPTED"] || null,
       workStarted: events["WORK_STARTED"] || null,
       workCompleted: events["WORK_COMPLETED"] || null,
-      customerConfirmed: events["CUSTOMER_CONFIRMED"] || null,
+      // The event confirmCompletion actually writes. The old
+      // "CUSTOMER_CONFIRMED" key never matched anything, so this was always null.
+      customerConfirmed: events["CUSTOMER_CONFIRMED_COMPLETION"] || null,
       cancelled: events["BOOKING_CANCELLED"] || null,
       expired: events["JOB_EXPIRED"] || null,
       currentJobStatus: currentStatus,

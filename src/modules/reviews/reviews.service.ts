@@ -65,10 +65,20 @@ export class ReviewsService {
       );
     }
 
-    // Booking must be completed and confirmed by the customer
-    const confirmedByCustomer = booking.job.timeline.some(
-      (t) => t.event === "CUSTOMER_CONFIRMED",
-    );
+    // Booking must be completed and confirmed by the customer.
+    //
+    // The flag on the booking is the authoritative record. This used to match a
+    // timeline event named "CUSTOMER_CONFIRMED", but confirmCompletion writes
+    // "CUSTOMER_CONFIRMED_COMPLETION" — so the scan never matched and every
+    // review, from either side, was rejected as unconfirmed. The timeline is
+    // still consulted as a fallback for bookings confirmed before the flag
+    // existed.
+    const confirmedByCustomer =
+      booking.customerConfirmedCompletion ||
+      booking.confirmedAt !== null ||
+      booking.job.timeline.some(
+        (t) => t.event === "CUSTOMER_CONFIRMED_COMPLETION",
+      );
 
     if (booking.status !== BookingStatus.COMPLETED) {
       throw new BadRequestException(

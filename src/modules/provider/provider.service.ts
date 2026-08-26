@@ -17,6 +17,7 @@ import {
   UserStatus,
   VerificationStatus,
   BookingStatus,
+  ReviewStatus,
   WalletType,
 } from "generated/prisma/client";
 import { VerificationService } from "../verification/verification.service";
@@ -740,6 +741,101 @@ export class ProviderService {
       totalCompletedJobs: bookingStats.completedJobs,
       // Module 19: rank badge shown to customers browsing providers
       rank: user.providerRanking?.currentRank ?? ProviderRank.NONE,
+    };
+  }
+
+  // ─── Customer Profile, as seen by a provider ─────────────────────────
+
+  /**
+   * The other half of the marketplace: what a provider is allowed to know
+   * about a customer before, during and after working for them.
+   *
+   * Deliberately not `@Public()` and deliberately not addressable by id alone —
+   * it is gated on the two having a booking together. A provider can look up a
+   * customer they are dealing with; they cannot walk the user table.
+   *
+   * Contact details are included because the provider already receives them on
+   * the booking itself; withholding them here would only be theatre.
+   */
+  async getCustomerProfileForProvider(providerId: string, customerId: string) {
+    const shared = await this.prisma.booking.findFirst({
+      where: { providerId, customerId },
+      select: { id: true },
+    });
+
+    if (!shared) {
+      throw new ForbiddenException(
+        "You can only view customers you have a booking with",
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: customerId },
+      include: { city: true, ratingSummary: true },
+    });
+
+    if (!user || !hasRole(user, UserRole.CUSTOMER) || !user.isActive) {
+      throw new NotFoundException("Customer not found");
+    }
+
+    const [jobsPosted, completedWithYou, totalCompleted, cancelled, reviews] =
+      await Promise.all([
+        this.prisma.job.count({ where: { customerId } }),
+        this.prisma.booking.count({
+          where: { customerId, providerId, status: BookingStatus.COMPLETED },
+        }),
+        this.prisma.booking.count({
+          where: { customerId, status: BookingStatus.COMPLETED },
+        }),
+        this.prisma.booking.count({
+          where: { customerId, status: BookingStatus.CANCELLED },
+        }),
+        // What other providers said about working for them. The reviewer's
+        // name is the only thing a provider needs from the other side.
+        this.prisma.review.findMany({
+          where: {
+            revieweeId: customerId,
+            status: ReviewStatus.APPROVED,
+            deletedAt: null,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          select: {
+            id: true,
+            rating: true,
+            reviewText: true,
+            createdAt: true,
+            reviewer: {
+              select: { id: true, fullName: true, profilePhoto: true },
+            },
+            job: { select: { id: true, title: true } },
+          },
+        }),
+      ]);
+
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      profilePhoto: user.profilePhoto,
+      phone: user.phone,
+      address: user.address,
+      city: user.city,
+      memberSince: user.createdAt,
+      rating: user.ratingSummary?.averageRating ?? 0,
+      totalReviews: user.ratingSummary?.totalReviews ?? 0,
+      ratingDistribution: {
+        fiveStar: user.ratingSummary?.fiveStarCount ?? 0,
+        fourStar: user.ratingSummary?.fourStarCount ?? 0,
+        threeStar: user.ratingSummary?.threeStarCount ?? 0,
+        twoStar: user.ratingSummary?.twoStarCount ?? 0,
+        oneStar: user.ratingSummary?.oneStarCount ?? 0,
+      },
+      jobsPosted,
+      jobsCompleted: totalCompleted,
+      jobsCancelled: cancelled,
+      /** How many of those were with the provider asking. */
+      jobsWithYou: completedWithYou,
+      reviews,
     };
   }
 

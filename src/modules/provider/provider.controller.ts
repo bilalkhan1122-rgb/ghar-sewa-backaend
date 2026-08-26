@@ -7,6 +7,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   UseInterceptors,
   UploadedFile,
   ParseFilePipe,
@@ -69,6 +70,23 @@ export class ProviderController {
     @Body() dto: UpdateProviderProfileDto,
   ) {
     return this.providerService.updateProviderProfile(userId, dto);
+  }
+
+  // ─── Customer Profile ────────────────────────────────────────────────
+
+  @Get("/customers/:id")
+  @ApiOperation({
+    summary:
+      "View a customer's profile — only customers this provider has a booking with",
+  })
+  async getCustomerProfile(
+    @GetUser("sub") providerId: string,
+    @Param("id", ParseUUIDPipe) customerId: string,
+  ) {
+    return this.providerService.getCustomerProfileForProvider(
+      providerId,
+      customerId,
+    );
   }
 
   // ─── Completion Progress ─────────────────────────────────────────────
