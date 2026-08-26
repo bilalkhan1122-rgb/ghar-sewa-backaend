@@ -9,6 +9,7 @@ import { PenaltiesModule } from "../penalties/penalties.module";
 import { WalletModule } from "../wallet/wallet.module";
 import { RankingModule } from "../ranking/ranking.module";
 import { RealtimeModule } from "../realtime/realtime.module";
+import { CategoriesModule } from "../categories/categories.module";
 
 @Module({
   imports: [
@@ -18,6 +19,9 @@ import { RealtimeModule } from "../realtime/realtime.module";
     WalletModule,
     RankingModule,
     RealtimeModule,
+    // For SubcategoriesService — a direct booking creates a job, so it has
+    // to validate a sub-type the same way posting one does.
+    CategoriesModule,
   ],
   controllers: [
     CustomerBookingController,

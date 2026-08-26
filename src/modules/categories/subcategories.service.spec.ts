@@ -456,6 +456,47 @@ describe("SubcategoriesService", () => {
     });
   });
 
+  describe("assertBelongsToCategory", () => {
+    it("passes for an active sub-type of the given category", async () => {
+      prisma.serviceSubcategory.findUnique.mockResolvedValue(subcategory());
+
+      await expect(
+        service.assertBelongsToCategory("cat1", "sub1"),
+      ).resolves.toBeUndefined();
+    });
+
+    it("rejects a sub-type that does not exist", async () => {
+      prisma.serviceSubcategory.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.assertBelongsToCategory("cat1", "nope"),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("rejects a hidden sub-type", async () => {
+      prisma.serviceSubcategory.findUnique.mockResolvedValue(
+        subcategory({ isActive: false }),
+      );
+
+      await expect(
+        service.assertBelongsToCategory("cat1", "sub1"),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    // The check that actually matters: a real, active sub-type of some *other*
+    // category would pass a bare existence test and file the work under a
+    // pairing that does not exist.
+    it("rejects a sub-type belonging to a different category", async () => {
+      prisma.serviceSubcategory.findUnique.mockResolvedValue(
+        subcategory({ categoryId: "cat2" }),
+      );
+
+      await expect(
+        service.assertBelongsToCategory("cat1", "sub1"),
+      ).rejects.toThrow(/does not belong to the selected category/);
+    });
+  });
+
   describe("adminListSubcategories", () => {
     it("returns hidden rows too when no filter is given", async () => {
       prisma.serviceSubcategory.findMany.mockResolvedValue([]);

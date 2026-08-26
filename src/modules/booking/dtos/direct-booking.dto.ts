@@ -6,8 +6,9 @@ import {
   Max,
   MinLength,
   MaxLength,
+  IsOptional,
 } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 
 export class DirectBookingDto {
@@ -24,6 +25,18 @@ export class DirectBookingDto {
   })
   @IsUUID("4")
   categoryId: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Optional sub-type within the category, e.g. 'Gas refill' under " +
+      "'AC Repair'. Must belong to `categoryId` and be active. Matches " +
+      "`POST /jobs`, so booking a provider directly records the same detail " +
+      "as posting the job openly.",
+    example: "uuid-here",
+  })
+  @IsOptional()
+  @IsUUID("4")
+  subcategoryId?: string;
 
   @ApiProperty({
     description: "Job title",

@@ -507,6 +507,10 @@ export class BiddingService {
       },
       include: {
         category: true,
+        // The sub-type is what tells a provider scanning the feed whether the
+        // job is a gas refill or a jet wash. Without it every "AC Repair" job
+        // looks alike until they open it.
+        subcategory: true,
         images: true,
         customer: {
           select: {

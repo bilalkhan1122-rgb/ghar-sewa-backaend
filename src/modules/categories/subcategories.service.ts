@@ -115,6 +115,40 @@ export class SubcategoriesService {
     });
   }
 
+  /**
+   * Throws unless `subcategoryId` is real, active, and a child of
+   * `categoryId`.
+   *
+   * The parent check is the one that matters. A sub-type id belonging to a
+   * *different* category passes a bare existence check and would quietly file
+   * the work as, say, "AC Repair / Solar panel cleaning" — matching providers
+   * on one thing and telling them another.
+   *
+   * Lives here because the rule belongs to sub-types, and both ways of
+   * creating work — posting a job and booking a provider directly — have to
+   * apply the same one. (`JobsService` still carries an inline copy that
+   * predates this; folding it in is a safe follow-up, but its tests mock
+   * Prisma directly so it is not a no-op edit.)
+   */
+  async assertBelongsToCategory(
+    categoryId: string,
+    subcategoryId: string,
+  ): Promise<void> {
+    const subcategory = await this.prisma.serviceSubcategory.findUnique({
+      where: { id: subcategoryId },
+    });
+
+    if (!subcategory || !subcategory.isActive) {
+      throw new BadRequestException("Invalid or inactive subcategory");
+    }
+
+    if (subcategory.categoryId !== categoryId) {
+      throw new BadRequestException(
+        "The subcategory does not belong to the selected category",
+      );
+    }
+  }
+
   // ─── Admin ───────────────────────────────────────────────────────────
 
   /** Every sub-type of a category, hidden ones included. */

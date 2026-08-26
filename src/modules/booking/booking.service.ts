@@ -7,6 +7,7 @@ import {
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "src/prisma/prisma.service";
 import { DirectBookingDto } from "./dtos/direct-booking.dto";
+import { SubcategoriesService } from "../categories/subcategories.service";
 import { CounterBookingDto } from "./dtos/counter-booking.dto";
 import { BookingQueryDto, BookingSortField } from "./dtos/booking-query.dto";
 import { Logger } from "nestjs-pino";
@@ -39,6 +40,7 @@ export class BookingService {
     private readonly wallet: WalletService,
     private readonly ranking: RankingService,
     private readonly realtime: RealtimeService,
+    private readonly subcategories: SubcategoriesService,
   ) {}
 
   // ─── Direct Booking ──────────────────────────────────────────────────
@@ -82,6 +84,15 @@ export class BookingService {
       throw new BadRequestException("Invalid or inactive category");
     }
 
+    // Same rule `POST /jobs` applies: a sub-type from another category would
+    // otherwise file the work under a pairing that does not exist.
+    if (dto.subcategoryId) {
+      await this.subcategories.assertBelongsToCategory(
+        dto.categoryId,
+        dto.subcategoryId,
+      );
+    }
+
     // Same rule as a posted job — a direct booking the wallet cannot cover
     // strands the provider at payment time.
     await this.wallet.assertCanStartJob(customerId, dto.totalAmount);
@@ -93,6 +104,7 @@ export class BookingService {
         data: {
           customerId,
           categoryId: dto.categoryId,
+          subcategoryId: dto.subcategoryId ?? null,
           title: dto.title,
           description: dto.description,
           address: dto.address,
@@ -103,6 +115,10 @@ export class BookingService {
           status: JobStatus.PENDING,
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h expiry (kept for record)
         },
+        // The response is typed as a full job by the app, which read `category`
+        // off it and got undefined. Embedding both here also means the caller
+        // sees the sub-type it just sent echoed back.
+        include: { category: true, subcategory: true },
       });
 
       // Create the booking
@@ -1093,6 +1109,7 @@ export class BookingService {
           job: {
             include: {
               category: true,
+              subcategory: true,
               images: { take: 1 },
             },
           },
@@ -1174,6 +1191,7 @@ export class BookingService {
           job: {
             include: {
               category: true,
+              subcategory: true,
               images: { take: 1 },
             },
           },
@@ -1216,6 +1234,7 @@ export class BookingService {
         job: {
           include: {
             category: true,
+            subcategory: true,
             images: true,
           },
         },
@@ -1347,6 +1366,7 @@ export class BookingService {
         job: {
           include: {
             category: true,
+            subcategory: true,
             images: { take: 1 },
           },
         },
@@ -1379,6 +1399,7 @@ export class BookingService {
         job: {
           include: {
             category: true,
+            subcategory: true,
             images: { take: 1 },
           },
         },
@@ -1522,7 +1543,7 @@ export class BookingService {
         take: limit,
         orderBy: { [orderByField]: sortOrder },
         include: {
-          job: { include: { category: true } },
+          job: { include: { category: true, subcategory: true } },
           customer: { select: { id: true, fullName: true, phone: true } },
           provider: { select: { id: true, fullName: true, phone: true } },
         },
@@ -1551,7 +1572,7 @@ export class BookingService {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        job: { include: { category: true, images: true } },
+        job: { include: { category: true, subcategory: true, images: true } },
         customer: { include: { city: true } },
         provider: {
           include: {
