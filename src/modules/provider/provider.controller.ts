@@ -20,6 +20,8 @@ import { ApiTags, ApiConsumes, ApiBody, ApiOperation } from "@nestjs/swagger";
 import { ProviderService } from "./provider.service";
 import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Public } from "src/common/decorators/public.decorator";
+import { Roles } from "src/common/decorators/roles.decorator";
+import { UserRole } from "generated/prisma/client";
 import { CompleteProviderProfileDto } from "./dtos/complete-provider-profile.dto";
 import { UpdateProviderProfileDto } from "./dtos/update-provider-profile.dto";
 import { AvailabilityDto } from "./dtos/availability.dto";
@@ -74,6 +76,10 @@ export class ProviderController {
 
   // ─── Customer Profile ────────────────────────────────────────────────
 
+  // Method-level rather than on the class: RolesGuard does not consult
+  // `@Public`, so a class-level @Roles would start rejecting the two public
+  // routes below (`GET /providers`, `GET /provider/:id`) for want of a user.
+  @Roles(UserRole.PROVIDER)
   @Get("/customers/:id")
   @ApiOperation({
     summary:

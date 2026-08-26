@@ -758,14 +758,28 @@ export class ProviderService {
    * the booking itself; withholding them here would only be theatre.
    */
   async getCustomerProfileForProvider(providerId: string, customerId: string) {
+    // `acceptedAt` rather than a status, because the question is "did these two
+    // ever actually agree to work together", and that is not what a bare
+    // provider+customer match answers.
+    //
+    // A direct booking is created as PENDING by the customer alone, so an
+    // unfiltered match handed over the customer's phone and address the moment
+    // they sent a request — before the provider agreed, and permanently after
+    // they declined, since declining only moves the row to CANCELLED.
+    //
+    // Bid-accepted bookings set `acceptedAt` at creation and direct ones set it
+    // on acceptance, so this covers both routes into a real engagement. It is
+    // never cleared, which is deliberate here: a booking cancelled halfway
+    // through still concerns someone the provider genuinely worked with, and
+    // they keep the contact details for it.
     const shared = await this.prisma.booking.findFirst({
-      where: { providerId, customerId },
+      where: { providerId, customerId, acceptedAt: { not: null } },
       select: { id: true },
     });
 
     if (!shared) {
       throw new ForbiddenException(
-        "You can only view customers you have a booking with",
+        "You can only view customers whose booking you have accepted",
       );
     }
 
