@@ -580,12 +580,37 @@ export class ProviderService {
           city: true,
           ratingSummary: true,
           providerRanking: true,
-          providerProfile: { include: { categories: true } },
+          providerProfile: {
+            include: { categories: { include: { category: true } } },
+          },
         },
         orderBy,
       }),
       this.prisma.user.count({ where }),
     ]);
+
+    // One grouped count for the whole page rather than a count per row: the
+    // card shows a completed-jobs figure, and doing that per provider would be
+    // twenty queries for a twenty-row page.
+    //
+    // Counted live rather than read off ProviderRanking.completedJobs, which
+    // the schema is explicit is a snapshot from the last rank evaluation and
+    // not a live counter — a provider would see a stale figure on their own
+    // card between evaluations.
+    const completedByProvider = new Map<string, number>();
+    if (users.length > 0) {
+      const grouped = await this.prisma.booking.groupBy({
+        by: ["providerId"],
+        where: {
+          providerId: { in: users.map((u) => u.id) },
+          status: BookingStatus.COMPLETED,
+        },
+        _count: { _all: true },
+      });
+      for (const row of grouped) {
+        completedByProvider.set(row.providerId, row._count._all);
+      }
+    }
 
     const rows = users.map((u) => ({
       id: u.id,
@@ -599,6 +624,12 @@ export class ProviderService {
       city: u.city,
       rating: u.ratingSummary?.averageRating ?? 0,
       totalReviews: u.ratingSummary?.totalReviews ?? 0,
+      // The trades this provider works, so a browse card can read
+      // "Plumber · Lahore" without a second request per row.
+      categories: (u.providerProfile?.categories ?? []).map(
+        (pc) => pc.category,
+      ),
+      totalCompletedJobs: completedByProvider.get(u.id) ?? 0,
       // Rank badge for customer-facing listings, and the integration point for
       // future rank-based boosting of the default order.
       rank: u.providerRanking?.currentRank ?? ProviderRank.NONE,
