@@ -24,6 +24,7 @@ import { AdminModule } from "./modules/admin/admin.module";
 import { RankingModule } from "./modules/ranking/ranking.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { RealtimeModule } from "./modules/realtime/realtime.module";
+import { PaymentModule } from "./modules/payment/payment.module";
 import { AppConfigModule } from "./config/config.module";
 import { loggerConfig } from "./config/logger.config";
 import { CorrelationIdMiddleware } from "./common/middleware/correlation-id.middleware";
@@ -74,6 +75,7 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
     SupportModule,
     PenaltiesModule,
     WalletModule,
+    PaymentModule,
     AdminModule,
     RankingModule,
     AnalyticsModule,
