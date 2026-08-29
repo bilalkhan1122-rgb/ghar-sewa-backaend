@@ -35,7 +35,8 @@ export class JazzCashGateway implements PaymentGateway {
   constructor(private readonly config: ConfigService) {
     this.merchantId = this.config.get("JAZZCASH_MERCHANT_ID", "");
     this.password = this.config.get("JAZZCASH_PASSWORD", "");
-    this.returnUrl = this.config.get("JAZZCASH_RETURN_URL", "");
+    const appUrl = this.config.get<string>("APP_URL", "http://localhost:3000");
+    this.returnUrl = this.config.get("JAZZCASH_RETURN_URL", `${appUrl}/api/v1/payments/webhook/jazzcash`);
     this.industryTypeId = this.config.get("JAZZCASH_INDUSTRY_TYPE_ID", "RPRO");
     this.baseUrl = this.config.get(
       "JAZZCASH_BASE_URL",

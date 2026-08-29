@@ -35,7 +35,8 @@ export class CardGateway implements PaymentGateway {
   constructor(private readonly config: ConfigService) {
     this.merchantId = this.config.get("CARD_GATEWAY_MERCHANT_ID", "");
     this.secretKey = this.config.get("CARD_GATEWAY_SECRET_KEY", "");
-    this.returnUrl = this.config.get("CARD_GATEWAY_RETURN_URL", "");
+    const appUrl = this.config.get<string>("APP_URL", "http://localhost:3000");
+    this.returnUrl = this.config.get("CARD_GATEWAY_RETURN_URL", `${appUrl}/api/v1/payments/webhook/card`);
     this.baseUrl = this.config.get(
       "CARD_GATEWAY_BASE_URL",
       "https://sandbox.cardgateway.example.com",

@@ -34,7 +34,8 @@ export class EasypaisaGateway implements PaymentGateway {
   constructor(private readonly config: ConfigService) {
     this.storeId = this.config.get("EASYPAISA_STORE_ID", "");
     this.hashKey = this.config.get("EASYPAISA_HASH_KEY", "");
-    this.returnUrl = this.config.get("EASYPAISA_RETURN_URL", "");
+    const appUrl = this.config.get<string>("APP_URL", "http://localhost:3000");
+    this.returnUrl = this.config.get("EASYPAISA_RETURN_URL", `${appUrl}/api/v1/payments/webhook/easypaisa`);
     this.baseUrl = this.config.get(
       "EASYPAISA_BASE_URL",
       "https://sandbox.easypaisa.com.pk",
