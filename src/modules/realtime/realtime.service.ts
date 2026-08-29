@@ -19,6 +19,11 @@ export const PUSHER_EVENTS = {
   JOB_URGENT_EXPIRED: "job.urgent.expired",
   JOB_URGENT_ACCEPTED: "job.urgent.accepted",
   ANALYTICS_UPDATED: "analytics.updated",
+  PAYMENT_PROCESSING: "payment.processing",
+  PAYMENT_SUCCEEDED: "payment.succeeded",
+  PAYMENT_FAILED: "payment.failed",
+  WALLET_CREDITED: "wallet.credited",
+  BOOKING_PAYMENT_COMPLETED: "booking.payment.completed",
 } as const;
 
 /**
@@ -215,6 +220,90 @@ export class RealtimeService {
         reason,
         timestamp: new Date(),
       },
+    );
+  }
+
+  // ─── Payment events ─────────────────────────────────────────────────
+
+  /** payment.processing → user's private channel. */
+  publishPaymentProcessing(
+    userId: string,
+    payload: {
+      paymentId: string;
+      amount: number;
+      gateway: string;
+      timestamp: Date;
+    },
+  ): Promise<boolean> {
+    return this.publish(
+      PUSHER_CHANNELS.user(userId),
+      PUSHER_EVENTS.PAYMENT_PROCESSING,
+      payload,
+    );
+  }
+
+  /** payment.succeeded → user's private channel. */
+  publishPaymentSucceeded(
+    userId: string,
+    payload: {
+      paymentId: string;
+      amount: number;
+      gateway: string;
+      timestamp: Date;
+    },
+  ): Promise<boolean> {
+    return this.publish(
+      PUSHER_CHANNELS.user(userId),
+      PUSHER_EVENTS.PAYMENT_SUCCEEDED,
+      payload,
+    );
+  }
+
+  /** payment.failed → user's private channel. */
+  publishPaymentFailed(
+    userId: string,
+    payload: {
+      paymentId: string;
+      reason: string;
+      timestamp: Date;
+    },
+  ): Promise<boolean> {
+    return this.publish(
+      PUSHER_CHANNELS.user(userId),
+      PUSHER_EVENTS.PAYMENT_FAILED,
+      payload,
+    );
+  }
+
+  /** wallet.credited → user's private channel. */
+  publishWalletCredited(
+    userId: string,
+    payload: {
+      paymentId: string;
+      amount: number;
+      timestamp: Date;
+    },
+  ): Promise<boolean> {
+    return this.publish(
+      PUSHER_CHANNELS.user(userId),
+      PUSHER_EVENTS.WALLET_CREDITED,
+      payload,
+    );
+  }
+
+  /** booking.payment.completed → user's private channel. */
+  publishBookingPaymentCompleted(
+    userId: string,
+    payload: {
+      paymentId: string;
+      settledBookings: string[];
+      timestamp: Date;
+    },
+  ): Promise<boolean> {
+    return this.publish(
+      PUSHER_CHANNELS.user(userId),
+      PUSHER_EVENTS.BOOKING_PAYMENT_COMPLETED,
+      payload,
     );
   }
 }
