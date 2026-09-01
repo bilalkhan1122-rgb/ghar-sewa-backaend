@@ -10,7 +10,12 @@ import {
 } from "generated/prisma/client";
 import { NotificationsService } from "../notifications/notifications.service";
 import { RealtimeService } from "../realtime/realtime.service";
-import { highestQualifyingRank, rankOrder, RANK_TIERS } from "./ranking.config";
+import {
+  highestQualifyingRank,
+  rankOrder,
+  tierBenefits,
+  RANK_TIERS,
+} from "./ranking.config";
 import { hasRole } from "src/common/roles";
 
 const RANK_LABELS: Record<ProviderRank, string> = {
@@ -28,6 +33,37 @@ const RANK_EMOJI: Record<ProviderRank, string> = {
   [ProviderRank.GOLD]: "🥇",
   [ProviderRank.PLATINUM]: "💎",
 };
+
+/**
+ * Booking outcomes that count as settled, and so form the denominator of the
+ * completion rate.
+ *
+ * Bookings still in flight (PENDING, ACCEPTED, IN_PROGRESS) are excluded
+ * deliberately: a provider halfway through this week's work has not failed to
+ * complete anything, and counting those against them would make the rate sag
+ * every time they got busy.
+ */
+const SETTLED_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.COMPLETED,
+  BookingStatus.CANCELLED,
+  BookingStatus.DISPUTED,
+];
+
+/**
+ * The middle value of a sorted list, or null for an empty one.
+ *
+ * Median rather than mean: one booking accepted after a night's sleep would
+ * drag an average into uselessness, and the figure is meant to describe the
+ * typical wait a customer can expect.
+ */
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
 
 /**
  * Module 19 — Provider Ranking.
@@ -240,9 +276,10 @@ export class RankingService {
       return null;
     }
 
-    const ranking = await this.prisma.providerRanking.findUnique({
-      where: { providerId },
-    });
+    const [ranking, performance] = await Promise.all([
+      this.prisma.providerRanking.findUnique({ where: { providerId } }),
+      this.getPerformance(providerId),
+    ]);
 
     if (!ranking) {
       return {
@@ -253,6 +290,8 @@ export class RankingService {
         averageRating: 0,
         rankAchievedAt: null,
         lastEvaluatedAt: null,
+        ...performance,
+        benefits: tierBenefits(ProviderRank.NONE),
       };
     }
 
@@ -264,6 +303,62 @@ export class RankingService {
       averageRating: ranking.averageRating,
       rankAchievedAt: ranking.rankAchievedAt,
       lastEvaluatedAt: ranking.lastEvaluatedAt,
+      ...performance,
+      benefits: tierBenefits(ranking.currentRank),
+    };
+  }
+
+  /**
+   * The two figures the rank screen shows beside the tier: how reliably this
+   * provider finishes what they take on, and how quickly they answer.
+   *
+   * Both are derived from the bookings themselves rather than stored on
+   * `ProviderRanking`. They are read on one screen by one provider at a time,
+   * so a live count costs nothing worth denormalising for — and a stored copy
+   * would need invalidating on every booking transition.
+   */
+  private async getPerformance(providerId: string) {
+    const [settled, completed, accepted] = await Promise.all([
+      this.prisma.booking.count({
+        where: { providerId, status: { in: SETTLED_BOOKING_STATUSES } },
+      }),
+      this.prisma.booking.count({
+        where: { providerId, status: BookingStatus.COMPLETED },
+      }),
+      // Only the most recent hundred: a provider's current responsiveness is
+      // the useful figure, and their first month two years ago is not part of
+      // it.
+      this.prisma.booking.findMany({
+        where: { providerId, acceptedAt: { not: null } },
+        select: { createdAt: true, acceptedAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }),
+    ]);
+
+    const responseMinutes = median(
+      accepted
+        .map((booking) =>
+          Math.round(
+            (booking.acceptedAt!.getTime() - booking.createdAt.getTime()) /
+              60_000,
+          ),
+        )
+        // A clock skew between rows can produce a negative gap; it describes
+        // nothing real and would pull the median below zero.
+        .filter((minutes) => minutes >= 0),
+    );
+
+    return {
+      /**
+       * Percentage of settled bookings that were completed, or null for a
+       * provider who has not settled one yet — "0%" would read as a record of
+       * failure rather than an absence of history.
+       */
+      completionRate:
+        settled === 0 ? null : Math.round((completed / settled) * 100),
+      /** Median minutes from booking to acceptance, or null if never measured. */
+      responseTimeMinutes: responseMinutes,
     };
   }
 

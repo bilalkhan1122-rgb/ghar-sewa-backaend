@@ -220,6 +220,11 @@ export class ProviderController {
           type: "string",
           format: "binary",
         },
+        categoryId: {
+          type: "string",
+          description:
+            "Optional service category the photo shows, captioned over it in the gallery",
+        },
       },
     },
   })
@@ -237,8 +242,13 @@ export class ProviderController {
       }),
     )
     file: Express.Multer.File,
+    // Read off the multipart body rather than through a DTO: the global
+    // ValidationPipe's `forbidNonWhitelisted` would reject the whole request
+    // for a field it has no class to validate against, and a multipart body
+    // reaches it as strings either way. The service checks the id exists.
+    @Body("categoryId") categoryId?: string,
   ) {
-    return this.providerService.addGalleryImage(userId, file);
+    return this.providerService.addGalleryImage(userId, file, categoryId);
   }
 
   @Delete("/gallery/:imageId")

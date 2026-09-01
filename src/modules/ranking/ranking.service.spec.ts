@@ -15,7 +15,7 @@ describe("RankingService (Module 19)", () => {
 
   const prisma = {
     user: { findUnique: jest.fn(), findMany: jest.fn() },
-    booking: { count: jest.fn() },
+    booking: { count: jest.fn(), findMany: jest.fn() },
     ratingSummary: { findUnique: jest.fn() },
     providerRanking: {
       findUnique: jest.fn(),
@@ -250,15 +250,22 @@ describe("RankingService (Module 19)", () => {
   });
 
   describe("getMyRank", () => {
-    it("returns a NONE snapshot when no ranking row exists", async () => {
+    /** A provider with no bookings at all — nothing to compute a rate from. */
+    function noBookings() {
       prisma.user.findUnique.mockResolvedValue({
         role: "PROVIDER",
         roles: ["PROVIDER"],
       });
+      prisma.booking.count.mockResolvedValue(0);
+      prisma.booking.findMany.mockResolvedValue([]);
+    }
+
+    it("returns a NONE snapshot when no ranking row exists", async () => {
+      noBookings();
       prisma.providerRanking.findUnique.mockResolvedValue(null);
 
       const result = await service.getMyRank("p1");
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         providerId: "p1",
         rank: ProviderRank.NONE,
         rankLabel: "No rank",
@@ -266,7 +273,12 @@ describe("RankingService (Module 19)", () => {
         averageRating: 0,
         rankAchievedAt: null,
         lastEvaluatedAt: null,
+        // Null, not zero: a provider with no settled bookings has not failed
+        // to complete anything, and "0%" would read as a record of failure.
+        completionRate: null,
+        responseTimeMinutes: null,
       });
+      expect(result!.benefits.length).toBeGreaterThan(0);
     });
 
     it("returns null for non-providers", async () => {
@@ -275,6 +287,42 @@ describe("RankingService (Module 19)", () => {
         roles: ["CUSTOMER"],
       });
       expect(await service.getMyRank("c1")).toBeNull();
+    });
+
+    it("reports completion rate over settled bookings only", async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        role: "PROVIDER",
+        roles: ["PROVIDER"],
+      });
+      prisma.providerRanking.findUnique.mockResolvedValue(null);
+      prisma.booking.findMany.mockResolvedValue([]);
+      // 8 completed out of 10 settled. Bookings still in flight are excluded
+      // by the query itself, so a busy week cannot dent the figure.
+      prisma.booking.count.mockResolvedValueOnce(10).mockResolvedValueOnce(8);
+
+      const result = await service.getMyRank("p1");
+      expect(result!.completionRate).toBe(80);
+    });
+
+    it("takes the median acceptance gap, so one slow booking cannot skew it", async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        role: "PROVIDER",
+        roles: ["PROVIDER"],
+      });
+      prisma.providerRanking.findUnique.mockResolvedValue(null);
+      prisma.booking.count.mockResolvedValue(0);
+
+      const created = new Date("2026-09-01T10:00:00Z");
+      const at = (minutes: number) => ({
+        createdAt: created,
+        acceptedAt: new Date(created.getTime() + minutes * 60_000),
+      });
+      // 5, 10 and 600 minutes — the mean would be over three hours, which
+      // describes none of them.
+      prisma.booking.findMany.mockResolvedValue([at(5), at(10), at(600)]);
+
+      const result = await service.getMyRank("p1");
+      expect(result!.responseTimeMinutes).toBe(10);
     });
   });
 

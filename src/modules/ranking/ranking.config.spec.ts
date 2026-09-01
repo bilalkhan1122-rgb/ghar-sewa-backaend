@@ -1,9 +1,24 @@
 import { ProviderRank } from "generated/prisma/client";
-import { highestQualifyingRank, rankOrder, RANK_TIERS } from "./ranking.config";
+import {
+  highestQualifyingRank,
+  rankOrder,
+  tierBenefits,
+  RANK_TIERS,
+} from "./ranking.config";
 
 describe("Module 19 — ranking.config thresholds", () => {
   it("defines the correct tier requirements", () => {
-    expect(RANK_TIERS).toEqual([
+    // Thresholds and order only. The tiers also carry display copy, which is
+    // asserted separately — pinning the whole object here meant every wording
+    // change failed a test named for the numbers.
+    expect(
+      RANK_TIERS.map(({ rank, minCompletedJobs, minAverageRating, label }) => ({
+        rank,
+        minCompletedJobs,
+        minAverageRating,
+        label,
+      })),
+    ).toEqual([
       {
         rank: ProviderRank.PLATINUM,
         minCompletedJobs: 600,
@@ -29,6 +44,38 @@ describe("Module 19 — ranking.config thresholds", () => {
         label: "Bronze",
       },
     ]);
+  });
+
+  describe("tier benefits", () => {
+    it("gives every tier at least one stated benefit", () => {
+      for (const tier of RANK_TIERS) {
+        expect(tier.benefits.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("returns a tier's own benefits", () => {
+      expect(tierBenefits(ProviderRank.GOLD)).toEqual(
+        RANK_TIERS.find((tier) => tier.rank === ProviderRank.GOLD)?.benefits,
+      );
+    });
+
+    it("tells an unranked provider how to earn their first badge", () => {
+      // NONE is not a tier, so it has no perks to list — it gets the route in.
+      const benefits = tierBenefits(ProviderRank.NONE);
+      expect(benefits.length).toBeGreaterThan(0);
+      expect(benefits.join(" ")).toMatch(/50 jobs/);
+    });
+
+    it("claims no perk the platform does not actually deliver", () => {
+      // Commission is a flat rate for everyone and browse order ignores rank,
+      // so neither can be promised here. This guards the copy against drifting
+      // back into the aspirational.
+      const copy = RANK_TIERS.flatMap((tier) => tier.benefits)
+        .concat(tierBenefits(ProviderRank.NONE))
+        .join(" ")
+        .toLowerCase();
+      expect(copy).not.toMatch(/commission|priority|featured|early access/);
+    });
   });
 
   it("ranks NONE below Bronze", () => {

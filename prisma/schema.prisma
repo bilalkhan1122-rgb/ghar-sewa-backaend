@@ -619,6 +619,7 @@ model ServiceCategory {
   providers     ProviderServiceCategory[]
   jobs          Job[]
   subcategories ServiceSubcategory[]
+  galleryImages GalleryImage[]
 
   @@index([slug])
   @@index([isActive, displayOrder])
@@ -701,8 +702,21 @@ model GalleryImage {
   providerId String
   provider   ProviderProfile @relation(fields: [providerId], references: [userId], onDelete: Cascade)
   imageUrl   String          @db.VarChar(500)
-  createdAt  DateTime        @default(now())
 
+  // What kind of work the photo shows, captioned over it in the gallery.
+  //
+  // Nullable, and stays that way: every photo uploaded before this existed has
+  // none, and a provider adding one in a hurry should not be forced to
+  // classify it. Restricted to a real category rather than free text so the
+  // caption matches the trades the rest of the app is built from — onDelete
+  // is SetNull because retiring a service category must not delete a
+  // provider's portfolio.
+  categoryId String?
+  category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([categoryId])
   @@map("gallery_images")
 }
 

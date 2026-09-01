@@ -184,7 +184,11 @@ export class ProviderService {
                 category: true,
               },
             },
-            galleryImages: true,
+            galleryImages: {
+              include: {
+                category: { select: { id: true, name: true, icon: true } },
+              },
+            },
           },
         },
         city: true,
@@ -252,10 +256,17 @@ export class ProviderService {
 
     this.checkNotBanned(user);
 
+    // Created on demand rather than refused.
+    //
+    // This used to throw "complete your profile first", which was a deadlock
+    // once the trade details moved to Edit Profile: that screen could not save
+    // without a row, and the only endpoint that creates one — `completeProfile`
+    // — needs a CNIC number Edit Profile does not ask for. A bare row is
+    // already created this way by `addGalleryImage`, and it changes nothing
+    // about verification: `submit()` still refuses until every required field
+    // is actually filled in.
     if (!user.providerProfile) {
-      throw new BadRequestException(
-        "Complete your profile first using the profile completion endpoint",
-      );
+      await this.prisma.providerProfile.create({ data: { userId } });
     }
 
     const updateData: Record<string, unknown> = {};
@@ -420,7 +431,11 @@ export class ProviderService {
 
   // ─── Gallery Management ──────────────────────────────────────────────
 
-  async addGalleryImage(userId: string, file: Express.Multer.File) {
+  async addGalleryImage(
+    userId: string,
+    file: Express.Multer.File,
+    categoryId?: string,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { providerProfile: true },
@@ -450,13 +465,27 @@ export class ProviderService {
       );
     }
 
+    // Checked before the upload, so a bad id fails without leaving an orphan
+    // file in blob storage that nothing will ever reference.
+    if (categoryId) {
+      const category = await this.prisma.serviceCategory.findUnique({
+        where: { id: categoryId },
+        select: { id: true },
+      });
+      if (!category) {
+        throw new BadRequestException("Service category not found");
+      }
+    }
+
     const imageUrl = await this.fileUpload.uploadGalleryImage(file);
 
     const image = await this.prisma.galleryImage.create({
       data: {
         providerId: userId,
         imageUrl,
+        categoryId: categoryId ?? null,
       },
+      include: { category: { select: { id: true, name: true, icon: true } } },
     });
 
     return image;
@@ -512,6 +541,7 @@ export class ProviderService {
     return this.prisma.galleryImage.findMany({
       where: { providerId: userId },
       orderBy: { createdAt: "desc" },
+      include: { category: { select: { id: true, name: true, icon: true } } },
     });
   }
 
@@ -719,7 +749,11 @@ export class ProviderService {
                 category: true,
               },
             },
-            galleryImages: true,
+            galleryImages: {
+              include: {
+                category: { select: { id: true, name: true, icon: true } },
+              },
+            },
           },
         },
         city: true,

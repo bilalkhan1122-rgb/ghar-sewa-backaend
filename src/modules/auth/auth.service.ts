@@ -680,14 +680,27 @@ export class AuthService {
     // Awaited, not fire-and-forget: on a serverless host the function is
     // frozen the moment the response is written, and a detached send dies
     // with it.
-    await this.emails
+    const delivered = await this.emails
       .sendPasswordResetOtpEmail(user.email, user.fullName, otp)
       .catch((error: unknown) => {
         this.logger.error(
           { userId: user.id, error },
           "Failed to send password reset code",
         );
+        return false;
       });
+
+    // A rejected send used to leave no trace anywhere the user or an operator
+    // would look: the code was stored, the response said it was on its way,
+    // and the mail had already been refused. Say so, at error level, with the
+    // account attached.
+    if (!delivered) {
+      this.logger.error(
+        { userId: user.id, email: this.maskEmail(user.email) },
+        "Password reset code was not delivered — check EMAIL_FROM and the " +
+          "Resend domain. The user cannot complete forgot-password.",
+      );
+    }
 
     return { ...generic, sentTo: this.maskEmail(user.email) };
   }

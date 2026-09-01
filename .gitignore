@@ -64,3 +64,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Vercel CLI project link (contains project/org ids)
 .vercel
 .env*
+
+# Production database dumps. Real customer data — never commit these.
+backup-*.dump
+*.dump

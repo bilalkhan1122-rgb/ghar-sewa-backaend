@@ -19,10 +19,17 @@ export class EmailService {
   private readonly from: string;
   private readonly frontendUrl: string;
 
+  /**
+   * Resend's shared sandbox sender. Usable without verifying a domain, but it
+   * only delivers to the address that owns the Resend account — every other
+   * recipient is rejected with a 403. That is why reset codes stopped arriving
+   * on customers' Gmail while the API still answered "a code is on its way".
+   */
+  private static readonly SANDBOX_FROM = "Ghar Sewa <onboarding@resend.dev>";
+
   constructor(private readonly config: ConfigService) {
     this.from =
-      this.config.get<string>("EMAIL_FROM") ||
-      "Ghar Sewa <onboarding@resend.dev>";
+      this.config.get<string>("EMAIL_FROM") || EmailService.SANDBOX_FROM;
     this.frontendUrl =
       this.config.get<string>("FRONTEND_URL") || "http://localhost:3000";
 
@@ -35,13 +42,29 @@ export class EmailService {
           "Emails will be logged as [EMAIL-STUB] without a real send.",
       );
     }
+
+    // Loud at boot rather than once per silent failure: this combination looks
+    // healthy from the outside — Resend accepts the call and the API answers
+    // 201 — and only the recipient knows nothing arrived.
+    if (this.resend && this.from === EmailService.SANDBOX_FROM) {
+      this.logger.warn(
+        `EMAIL_FROM is not set, so mail is sent from ${EmailService.SANDBOX_FROM}. ` +
+          "Resend only delivers that sender to the account owner's own address; " +
+          "password-reset codes to anyone else will be rejected. " +
+          "Verify a domain in Resend and set EMAIL_FROM to an address on it.",
+      );
+    }
   }
 
   /**
    * Core send. Never throws — delivery problems are logged so the request
    * flow (signup, reset request, ...) is never blocked by email hiccups.
+   *
+   * Resolves to whether the mail was actually handed to Resend, so a caller
+   * that cares — `forgotPassword` does — can say so in its own logs instead of
+   * reporting success for a message that was refused.
    */
-  sendEmail(to: string, subject: string, html: string): Promise<void> {
+  sendEmail(to: string, subject: string, html: string): Promise<boolean> {
     // Password-reset and verification mails are sent without awaiting, so the
     // request does not wait on Resend. On Vercel that promise only survives
     // because of keepAlive.
@@ -52,13 +75,13 @@ export class EmailService {
     to: string,
     subject: string,
     html: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.resend) {
       this.logger.log(
         `[EMAIL-STUB] to=${to} subject="${subject}"`,
         EmailService.name,
       );
-      return;
+      return false;
     }
 
     const { error } = await this.resend.emails.send({
@@ -70,13 +93,15 @@ export class EmailService {
 
     if (error) {
       this.logger.error(
-        `Email send failed (${to}, ${subject}): ${error.message}`,
+        `Email send failed (from=${this.from}, to=${to}, subject="${subject}"): ` +
+          `${error.name ?? "error"} — ${error.message}`,
         EmailService.name,
       );
-      return;
+      return false;
     }
 
     this.logger.log(`Email sent to ${to} — ${subject}`, EmailService.name);
+    return true;
   }
 
   async sendWelcomeEmail(to: string, fullName: string): Promise<void> {
@@ -167,13 +192,14 @@ export class EmailService {
    * Separate from the link email above: the app cannot receive a one-time
    * token out of a browser, so it collects the code by hand instead.
    */
+  /** Resolves to whether the code actually went out — see `sendEmail`. */
   async sendPasswordResetOtpEmail(
     to: string,
     fullName: string,
     otp: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const firstName = fullName.split(" ")[0] || fullName;
-    await this.sendEmail(
+    return this.sendEmail(
       to,
       `${otp} is your Ghar Sewa password reset code`,
       this.layout(
