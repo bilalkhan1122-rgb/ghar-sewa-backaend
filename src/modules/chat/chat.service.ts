@@ -548,15 +548,36 @@ export class ChatService {
         skip,
         take: limit,
         orderBy: { [orderByField]: sortOrder },
-        include: this.conversationIncludes(),
+        include: {
+          ...this.conversationIncludes(),
+          // Who sent the last message, and what kind it was. The stored
+          // `lastMessage` is a rendered string and cannot answer either: an
+          // inbox has no way to prefix your own messages with "You:", and the
+          // media previews arrive as emoji baked into the text rather than as
+          // something the client can draw an icon for.
+          //
+          // Read off the newest message rather than denormalised onto the
+          // conversation, so no column — and so no migration — is added for
+          // two fields the row next to them already implies.
+          messages: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { senderId: true, type: true },
+          },
+        },
       }),
       this.prisma.conversation.count({ where }),
     ]);
 
     // Attach unread counts
     const withUnread = await Promise.all(
-      conversations.map(async (c) => ({
+      conversations.map(async ({ messages, ...c }) => ({
         ...c,
+        // Flattened out of the include: `messages` is the query's way of
+        // reaching the last one, not a field the inbox has any use for.
+        lastMessageSenderId: messages[0]?.senderId ?? null,
+        lastMessageType: messages[0]?.type ?? null,
         unreadCount: await this.unreadCount(c.id, userId),
       })),
     );

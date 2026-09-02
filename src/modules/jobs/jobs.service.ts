@@ -421,11 +421,17 @@ export class JobsService {
           // A provider marking the work complete leaves `status` at
           // IN_PROGRESS and both `completedAt` and `confirmedAt` null, so a
           // list selecting only those three cannot see the difference at all.
+          //
+          // `totalAmount` is the settled figure, which is not `offeredPrice`
+          // wherever a counter-offer was accepted: the customer's list showed
+          // what they first asked for while their wallet was debited the
+          // agreed amount, so the two disagreed on every negotiated job.
           bookings: {
             where: { status: { not: BookingStatus.CANCELLED } },
             select: {
               id: true,
               status: true,
+              totalAmount: true,
               completedAt: true,
               confirmedAt: true,
               providerConfirmedCompletion: true,
