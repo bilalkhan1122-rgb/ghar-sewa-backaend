@@ -124,6 +124,7 @@ export class JazzCashGateway implements PaymentGateway {
   async verifyPayment(params: {
     gatewayTransactionId: string;
     reference?: string;
+    expectedAmount?: number;
   }): Promise<GatewayVerificationResult> {
     if (!this.isConfigured) {
       return this.sandboxVerifyPayment(params);
@@ -270,19 +271,32 @@ export class JazzCashGateway implements PaymentGateway {
     });
   }
 
+  /**
+   * Reports the payment as paid in full.
+   *
+   * The amount is echoed back from what the caller says the payment is worth.
+   * This used to answer 0, which the service compares against the recorded
+   * amount before it credits anything — so every sandbox payment verified
+   * "successfully" and then silently credited nothing, leaving a PROCESSING
+   * row and a wallet that never moved.
+   */
   private sandboxVerifyPayment(params: {
     gatewayTransactionId: string;
     reference?: string;
+    expectedAmount?: number;
   }): Promise<GatewayVerificationResult> {
     this.logger.log(
-      { gatewayTransactionId: params.gatewayTransactionId },
+      {
+        gatewayTransactionId: params.gatewayTransactionId,
+        amount: params.expectedAmount ?? 0,
+      },
       "[SANDBOX] JazzCash payment verified",
     );
 
     return Promise.resolve({
       success: true,
       gatewayTransactionId: params.gatewayTransactionId,
-      amount: 0,
+      amount: params.expectedAmount ?? 0,
       currency: "PKR",
       status: "SANDBOX_VERIFIED",
       rawResponse: { sandbox: true },

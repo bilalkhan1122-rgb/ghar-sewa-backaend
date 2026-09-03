@@ -457,6 +457,86 @@ describe("PaymentService", () => {
         service.verifyPayment("user-123", "nonexistent"),
       ).rejects.toThrow(NotFoundException);
     });
+
+    /**
+     * Verification is the whole of the payment flow while the gateways run in
+     * sandbox — there is no webhook to fall back on — so the path from
+     * "verify" to "wallet credited" is worth asserting end to end.
+     */
+    it("should credit the wallet when the gateway confirms the full amount", async () => {
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+        id: "payment-123",
+        userId: "user-123",
+        status: PaymentStatus.PROCESSING,
+        amount: new Prisma.Decimal(5000),
+        bookingId: null,
+        walletId: "wallet-123",
+        idempotencyKey: "key-123",
+        gateway: PaymentGatewayType.JAZZCASH,
+        gatewayTransactionId: "JC-txn-123",
+      });
+
+      mockGateway.verifyPayment.mockResolvedValue({
+        success: true,
+        gatewayTransactionId: "JC-txn-123",
+        amount: 5000,
+        currency: "PKR",
+        status: "SANDBOX_VERIFIED",
+      });
+
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const tx = {
+          walletTransaction: { findFirst: jest.fn().mockResolvedValue(null) },
+          paymentTransaction: { update: jest.fn() },
+          wallet: { findUniqueOrThrow: jest.fn() },
+        };
+        return fn(tx) as Promise<unknown>;
+      });
+      mockWallet.credit.mockResolvedValue({});
+      mockWallet.audit.mockResolvedValue({});
+
+      const result = (await service.verifyPayment(
+        "user-123",
+        "payment-123",
+      )) as {
+        processed: boolean;
+      };
+
+      // The sandbox stubs have no gateway to ask what the payment was worth,
+      // so the recorded amount is handed to them. Without it they answer 0,
+      // the comparison below fails, and nothing is ever credited.
+      expect(mockGateway.verifyPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedAmount: 5000 }),
+      );
+      expect(mockWallet.credit).toHaveBeenCalled();
+      expect(result.processed).toBe(true);
+    });
+
+    it("should not credit when the gateway reports a different amount", async () => {
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue({
+        id: "payment-123",
+        userId: "user-123",
+        status: PaymentStatus.PROCESSING,
+        amount: new Prisma.Decimal(5000),
+        bookingId: null,
+        walletId: "wallet-123",
+        idempotencyKey: "key-123",
+        gateway: PaymentGatewayType.JAZZCASH,
+        gatewayTransactionId: "JC-txn-123",
+      });
+
+      mockGateway.verifyPayment.mockResolvedValue({
+        success: true,
+        gatewayTransactionId: "JC-txn-123",
+        amount: 1,
+        currency: "PKR",
+        status: "SUCCEEDED",
+      });
+
+      await service.verifyPayment("user-123", "payment-123");
+
+      expect(mockWallet.credit).not.toHaveBeenCalled();
+    });
   });
 
   // ─── Admin endpoints ─────────────────────────────────────────────

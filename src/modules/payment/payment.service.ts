@@ -357,6 +357,9 @@ export class PaymentService {
     const result = await gateway.verifyPayment({
       gatewayTransactionId: payment.gatewayTransactionId,
       reference: payment.id,
+      // Read only by the sandbox stubs — see the gateway interface. The
+      // amount compared below is still the one the gateway reports.
+      expectedAmount: Number(payment.amount),
     });
 
     if (
@@ -485,6 +488,9 @@ export class PaymentService {
     const result = await gateway.verifyPayment({
       gatewayTransactionId: payment.gatewayTransactionId,
       reference: payment.id,
+      // Read only by the sandbox stubs — see the gateway interface. The
+      // amount compared below is still the one the gateway reports.
+      expectedAmount: Number(payment.amount),
     });
 
     if (result.success) {

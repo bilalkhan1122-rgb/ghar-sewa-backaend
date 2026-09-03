@@ -94,10 +94,17 @@ export interface PaymentGateway {
    *
    * Called both from the webhook handler (as a belt-and-suspenders check)
    * and from a manual status-check endpoint.
+   *
+   * `expectedAmount` is what our own record says the payment is worth. A real
+   * gateway MUST ignore it and report the amount it actually took — the
+   * caller compares the two, and trusting our own figure here would defeat
+   * that check. It exists for the sandbox stubs, which have no gateway to ask
+   * and would otherwise report 0 and fail the comparison every time.
    */
   verifyPayment(params: {
     gatewayTransactionId: string;
     reference?: string;
+    expectedAmount?: number;
   }): Promise<GatewayVerificationResult>;
 
   /**
