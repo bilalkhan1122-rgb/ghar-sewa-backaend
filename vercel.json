@@ -19,7 +19,7 @@
     },
     {
       "path": "/api/v1/cron/expire-jobs",
-      "schedule": "0 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
