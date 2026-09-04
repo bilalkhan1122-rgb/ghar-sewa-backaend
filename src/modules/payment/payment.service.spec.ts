@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { PaymentService } from "./payment.service";
+import { PAYMENT_EVENTS, PaymentService } from "./payment.service";
 import { PaymentGatewayRegistry } from "./gateways/payment-gateway.registry";
 import { PrismaService } from "src/prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -63,7 +63,9 @@ const mockWallet = {
   ensureWallet: jest.fn(),
   credit: jest.fn(),
   audit: jest.fn(),
-  retryPendingPayments: jest.fn(),
+  // Every successful payment sweeps for pending bookings, so this needs a
+  // shape to destructure whether or not a test cares about settlement.
+  retryPendingPayments: jest.fn().mockResolvedValue({ settled: [], total: 0 }),
 };
 
 const mockLogger = {
@@ -282,6 +284,115 @@ describe("PaymentService", () => {
       });
       mockWallet.credit.mockResolvedValue({});
       mockWallet.audit.mockResolvedValue({});
+
+      const result = await service.processWebhook(
+        PaymentGatewayType.JAZZCASH,
+        { "content-type": "application/json" },
+        {},
+      );
+
+      expect(result.processed).toBe(true);
+      expect(mockWallet.credit).toHaveBeenCalled();
+    });
+
+    it("settles a pending booking after a top-up that names no booking", async () => {
+      // The shape every top-up the app makes has: the customer is sent to the
+      // wallet screen to clear a bill and pays there, so the payment has no
+      // bookingId. Gating settlement on that field left the money in the
+      // wallet and the booking PAYMENT_PENDING, and both the job screen and
+      // the dues banner went on asking to be paid.
+      const payment = {
+        id: "payment-123",
+        userId: "user-123",
+        amount: new Prisma.Decimal(1000),
+        bookingId: null,
+        walletId: "wallet-123",
+        idempotencyKey: "key-123",
+        gateway: PaymentGatewayType.JAZZCASH,
+        gatewayTransactionId: "JC-txn-123",
+        status: PaymentStatus.PROCESSING,
+      };
+
+      mockGateway.parseWebhook.mockReturnValue({
+        gatewayTransactionId: "JC-txn-123",
+        amount: 1000,
+        currency: "PKR",
+        status: "SUCCEEDED",
+        rawBody: {},
+      });
+
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(payment);
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const tx = {
+          walletTransaction: {
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+          paymentTransaction: { update: jest.fn() },
+          wallet: { findUniqueOrThrow: jest.fn() },
+        };
+        return fn(tx) as Promise<unknown>;
+      });
+      mockWallet.credit.mockResolvedValue({});
+      mockWallet.audit.mockResolvedValue({});
+      mockWallet.retryPendingPayments.mockResolvedValue({
+        settled: ["booking-123"],
+        total: 1,
+      });
+
+      await service.processWebhook(
+        PaymentGatewayType.JAZZCASH,
+        { "content-type": "application/json" },
+        {},
+      );
+
+      expect(mockWallet.retryPendingPayments).toHaveBeenCalledWith("user-123");
+      expect(mockRealtime.publish).toHaveBeenCalledWith(
+        expect.anything(),
+        PAYMENT_EVENTS.BOOKING_PAYMENT_COMPLETED,
+        expect.objectContaining({ settledBookings: ["booking-123"] }),
+      );
+    });
+
+    it("does not fail a payment whose settlement sweep throws", async () => {
+      // The wallet credit has already committed by this point. A booking that
+      // cannot be settled is for the reminder cron to retry, not a reason to
+      // report a payment that went through as failed.
+      const payment = {
+        id: "payment-123",
+        userId: "user-123",
+        amount: new Prisma.Decimal(1000),
+        bookingId: null,
+        walletId: "wallet-123",
+        idempotencyKey: "key-123",
+        gateway: PaymentGatewayType.JAZZCASH,
+        gatewayTransactionId: "JC-txn-123",
+        status: PaymentStatus.PROCESSING,
+      };
+
+      mockGateway.parseWebhook.mockReturnValue({
+        gatewayTransactionId: "JC-txn-123",
+        amount: 1000,
+        currency: "PKR",
+        status: "SUCCEEDED",
+        rawBody: {},
+      });
+
+      mockPrisma.paymentTransaction.findFirst.mockResolvedValue(payment);
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const tx = {
+          walletTransaction: {
+            findFirst: jest.fn().mockResolvedValue(null),
+          },
+          paymentTransaction: { update: jest.fn() },
+          wallet: { findUniqueOrThrow: jest.fn() },
+        };
+        return fn(tx) as Promise<unknown>;
+      });
+      mockWallet.credit.mockResolvedValue({});
+      mockWallet.audit.mockResolvedValue({});
+      mockWallet.retryPendingPayments.mockRejectedValue(
+        new Error("settlement blew up"),
+      );
 
       const result = await service.processWebhook(
         PaymentGatewayType.JAZZCASH,

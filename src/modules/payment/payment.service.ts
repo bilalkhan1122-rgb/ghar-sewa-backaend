@@ -636,36 +636,51 @@ export class PaymentService {
         },
       );
 
-      // If this payment is for a booking, attempt to settle pending booking payment
-      if (payment.bookingId) {
-        try {
-          const retryResult = await this.wallet.retryPendingPayments(
-            payment.userId,
-          );
-          if (retryResult.settled.length > 0) {
-            this.logger.log({
-              message: "Booking payment settled after gateway payment",
-              paymentId: payment.id,
-              settledBookingIds: retryResult.settled,
-            });
+      // Money has landed, so any booking left PAYMENT_PENDING can now be
+      // settled — the same sweep the admin top-up approval runs.
+      //
+      // Deliberately not gated on `payment.bookingId`. A top-up started from
+      // the wallet screen carries no booking, which is every top-up the app
+      // makes: the customer is sent to the wallet to clear a bill, tops up,
+      // and nothing reconciles it. The gate meant the common case never
+      // settled — the balance arrived, the booking stayed PAYMENT_PENDING,
+      // and both the job screen and the dues banner kept asking for money
+      // already paid until the next daily cron sweep.
+      //
+      // Safe to run for any payer: `retryPendingPayments` scans by customer
+      // and re-checks the balance per booking, so a provider top-up or a
+      // customer with nothing owing is a no-op.
+      //
+      // Guarded because the credit itself has already committed. Letting a
+      // settlement failure throw would fail a payment that did go through,
+      // and the reminder cron retries anyway.
+      try {
+        const retryResult = await this.wallet.retryPendingPayments(
+          payment.userId,
+        );
+        if (retryResult.settled.length > 0) {
+          this.logger.log({
+            message: "Booking payment settled after gateway payment",
+            paymentId: payment.id,
+            settledBookingIds: retryResult.settled,
+          });
 
-            void this.realtime.publish(
-              paymentChannel(payment.userId),
-              PAYMENT_EVENTS.BOOKING_PAYMENT_COMPLETED,
-              {
-                paymentId: payment.id,
-                settledBookings: retryResult.settled,
-                timestamp: new Date(),
-              },
-            );
-          }
-        } catch (err) {
-          const error = err as { message?: string };
-          this.logger.error(
-            { err: error, paymentId: payment.id },
-            "Could not settle pending booking after gateway payment",
+          void this.realtime.publish(
+            paymentChannel(payment.userId),
+            PAYMENT_EVENTS.BOOKING_PAYMENT_COMPLETED,
+            {
+              paymentId: payment.id,
+              settledBookings: retryResult.settled,
+              timestamp: new Date(),
+            },
           );
         }
+      } catch (err) {
+        const error = err as { message?: string };
+        this.logger.error(
+          { err: error, paymentId: payment.id },
+          "Could not settle pending booking after gateway payment",
+        );
       }
 
       this.logger.log({
