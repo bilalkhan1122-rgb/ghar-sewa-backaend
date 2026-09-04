@@ -36,6 +36,16 @@ export class CronController {
     return this.cron.sendPaymentReminders();
   }
 
+  @Public()
+  @Post("/expire-jobs")
+  @ApiOperation({
+    summary: "Retire jobs nobody answered before their deadline",
+  })
+  async expireJobs(@Headers("authorization") authorization?: string) {
+    this.assertCronCaller(authorization);
+    return this.cron.expireJobs();
+  }
+
   /**
    * Vercel sends `Authorization: Bearer <CRON_SECRET>`. With no secret
    * configured the endpoint stays shut rather than falling open — an

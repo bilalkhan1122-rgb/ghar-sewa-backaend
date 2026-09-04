@@ -1098,23 +1098,28 @@ export class JobsService {
   // ─── Expiry Job Cleanup ──────────────────────────────────────────────
 
   async expireOverdueJobs(): Promise<number> {
-    const result = await this.prisma.job.updateMany({
+    // Read the due jobs *before* expiring them, and notify exactly those.
+    //
+    // This used to expire first and then re-query for `status: EXPIRED` with
+    // the same `expiresAt` bound, which matches every job expired on any
+    // previous run as well. Nothing had noticed because the sweep only ever
+    // ran by hand; on a schedule it would have re-sent "Job expired" to every
+    // affected customer, every hour, forever.
+    const due = await this.prisma.job.findMany({
       where: {
         status: JobStatus.PENDING,
         expiresAt: { lte: new Date() },
       },
-      data: { status: JobStatus.EXPIRED },
+      select: { id: true, title: true, customerId: true, isUrgent: true },
     });
 
-    if (result.count > 0) {
-      // Fetch the expired jobs to notify their customers
-      const expiredJobs = await this.prisma.job.findMany({
-        where: {
-          status: JobStatus.EXPIRED,
-          expiresAt: { lte: new Date() },
-        },
-        select: { id: true, title: true, customerId: true, isUrgent: true },
+    if (due.length > 0) {
+      const result = await this.prisma.job.updateMany({
+        where: { id: { in: due.map((job) => job.id) } },
+        data: { status: JobStatus.EXPIRED },
       });
+
+      const expiredJobs = due;
 
       await this.notifications.sendToMany(
         expiredJobs.map((j) => ({
@@ -1146,9 +1151,11 @@ export class JobsService {
         message: "Expired overdue jobs",
         count: result.count,
       });
+
+      return result.count;
     }
 
-    return result.count;
+    return 0;
   }
 
   // ─── Notify Matching Providers ───────────────────────────────────────

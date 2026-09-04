@@ -3,6 +3,7 @@ import { Logger } from "nestjs-pino";
 import { PrismaService } from "src/prisma/prisma.service";
 import { WalletService } from "../wallet/wallet.service";
 import { NotificationsService } from "../notifications/notifications.service";
+import { JobsService } from "../jobs/jobs.service";
 import {
   BookingPaymentStatus,
   NotificationType,
@@ -18,8 +19,25 @@ export class CronService {
     private readonly prisma: PrismaService,
     private readonly wallet: WalletService,
     private readonly notifications: NotificationsService,
+    private readonly jobs: JobsService,
     private readonly logger: Logger,
   ) {}
+
+  /**
+   * Retires jobs nobody answered before their deadline.
+   *
+   * Urgent jobs are given 6 hours and the rest 24, and the provider feed has
+   * always honoured that with a live `expiresAt` filter. Nothing moved the
+   * job's own status though, so it stayed PENDING: gone from every provider's
+   * feed, still sitting in the customer's Active tab looking like it was out
+   * there collecting offers. This is what closes that gap, and expiring a job
+   * is what lets its owner repost it.
+   */
+  async expireJobs() {
+    const count = await this.jobs.expireOverdueJobs();
+    this.logger.log({ message: "Expiry sweep finished", count });
+    return { expired: count };
+  }
 
   /**
    * Chases every customer sitting on a booking both parties confirmed but
