@@ -23,6 +23,7 @@ import { UserRole, WalletType } from "generated/prisma/client";
 import { CreateTopUpDto } from "./dtos/create-topup.dto";
 import { TopUpQueryDto } from "./dtos/topup-query.dto";
 import { WalletTransactionQueryDto } from "./dtos/wallet-transaction-query.dto";
+import { SettleDuesDto } from "./dtos/settle-dues.dto";
 import { PaymentAccountsService } from "./payment-accounts.service";
 import { SettingsService } from "../settings/settings.service";
 
@@ -83,6 +84,14 @@ export class CustomerWalletController {
       count: dues.count,
       bookings: dues.bookings,
     };
+  }
+
+  @Post("/dues/settle")
+  @ApiOperation({
+    summary: "Pay an outstanding job from the balance I already have",
+  })
+  async settleDues(@GetUser("sub") userId: string, @Body() dto: SettleDuesDto) {
+    return this.walletService.settleDues(userId, dto.bookingId);
   }
 
   @Get("/transactions")

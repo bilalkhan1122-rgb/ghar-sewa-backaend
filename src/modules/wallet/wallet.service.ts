@@ -821,18 +821,31 @@ export class WalletService {
   // ─── Retry pending payment after wallet top-up ─────────────────────
 
   /**
-   * Called after a customer wallet top-up is approved. Scans for any
-   * PAYMENT_PENDING bookings belonging to that customer and retries the
-   * payment if sufficient funds are now available.
+   * Retries the charge on bookings left PAYMENT_PENDING because the wallet was
+   * short at the time both parties confirmed.
+   *
+   * Runs after money arrives — an approved top-up, a gateway payment, the
+   * nightly sweep — and now also when the customer asks for it directly from
+   * `settleDues`. Scoped to one booking when `bookingId` is given, which is
+   * what the job screen's "Pay now" needs: paying one job must not quietly
+   * drain the wallet across every other bill the customer owes.
+   *
+   * Oldest first, matching `outstandingDues`: when the balance only covers
+   * some of them, the provider who has waited longest gets paid.
    *
    * Returns the list of bookings that were settled.
    */
-  async retryPendingPayments(customerId: string) {
+  async retryPendingPayments(
+    customerId: string,
+    options: { bookingId?: string } = {},
+  ) {
     const pendingBookings = await this.prisma.booking.findMany({
       where: {
         customerId,
         paymentStatus: "PAYMENT_PENDING",
+        ...(options.bookingId ? { id: options.bookingId } : {}),
       },
+      orderBy: { createdAt: "asc" },
     });
 
     const settled: string[] = [];
@@ -865,6 +878,90 @@ export class WalletService {
     }
 
     return { settled, total: pendingBookings.length };
+  }
+
+  /**
+   * "Pay the provider now, out of the balance I already have."
+   *
+   * Every other route to settling a pending booking waits on someone else: an
+   * admin approving a top-up, a gateway callback, or the 09:00 sweep. A
+   * customer whose wallet already covers the bill had no way to just pay it,
+   * and was shown a "top up your wallet" banner while holding the money — so
+   * the provider stayed unpaid and the customer stayed blocked from posting
+   * for up to a day, over nothing.
+   *
+   * `bookingId` settles that one job; omitting it clears as much of the
+   * outstanding total as the balance reaches, oldest bill first.
+   *
+   * Deliberately thin: the charge itself stays in `processJobPayment`, which
+   * owns the ledger transaction, the commission split and the idempotency key.
+   * This adds who may ask for it and what they are told back, nothing more.
+   */
+  async settleDues(customerId: string, bookingId?: string) {
+    if (bookingId) {
+      const booking = await this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { id: true, customerId: true, paymentStatus: true },
+      });
+
+      // Same answer for "no such booking" and "not yours": a customer probing
+      // ids should not be able to tell the two apart.
+      if (!booking || booking.customerId !== customerId) {
+        throw new NotFoundException("Booking not found");
+      }
+
+      if (booking.paymentStatus !== BookingPaymentStatus.PAYMENT_PENDING) {
+        // Not an error. Two taps on "Pay now", or a sweep landing between the
+        // screen loading and the button being pressed, both end up here, and
+        // the job is paid either way.
+        const dues = await this.outstandingDues(customerId);
+        return {
+          settled: [],
+          settledCount: 0,
+          alreadySettled: true,
+          remainingTotal: dues.total,
+          remainingCount: dues.count,
+          shortfall: null,
+        };
+      }
+    }
+
+    const { settled } = await this.retryPendingPayments(customerId, {
+      bookingId,
+    });
+
+    const dues = await this.outstandingDues(customerId);
+
+    // Nothing moved and something is still owed: the balance did not stretch.
+    // Report the gap so the app can name a figure instead of repeating a
+    // generic "top up" at someone who just tried to pay.
+    let shortfall: Prisma.Decimal | null = null;
+    if (settled.length === 0 && dues.count > 0) {
+      const wallet = await this.ensureWallet(customerId, WalletType.CUSTOMER);
+      const target = bookingId
+        ? dues.bookings.find((booking) => booking.id === bookingId)
+        : dues.bookings[0];
+      if (target && wallet.balance.lessThan(target.totalAmount)) {
+        shortfall = target.totalAmount.minus(wallet.balance);
+      }
+    }
+
+    this.logger.log({
+      message: "Customer-initiated settlement",
+      customerId,
+      bookingId: bookingId ?? null,
+      settled,
+      remainingCount: dues.count,
+    });
+
+    return {
+      settled,
+      settledCount: settled.length,
+      alreadySettled: false,
+      remainingTotal: dues.total,
+      remainingCount: dues.count,
+      shortfall,
+    };
   }
 
   // ─── Refund services (consumed by the dispute workflow) ──────────────
