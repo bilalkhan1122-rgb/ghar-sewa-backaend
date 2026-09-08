@@ -53,6 +53,39 @@ describe("isChannelAllowedForUser (Pusher channel security)", () => {
     ).toBe(false);
   });
 
+  it("allows a customer on a city's nearby presence feed", () => {
+    expect(
+      isChannelAllowedForUser(
+        { sub: "c1", role: "CUSTOMER" },
+        "private-nearby-city-lahore",
+      ),
+    ).toBe(true);
+  });
+
+  it("allows a dual-role account on the nearby feed while it may act as a customer", () => {
+    expect(
+      isChannelAllowedForUser(
+        { sub: "x1", role: "PROVIDER", roles: ["PROVIDER", "CUSTOMER"] },
+        "private-nearby-city-karachi",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects pure providers from the nearby feed (a customer screen)", () => {
+    expect(
+      isChannelAllowedForUser(
+        { sub: "p1", role: "PROVIDER" },
+        "private-nearby-city-lahore",
+      ),
+    ).toBe(false);
+    expect(
+      isChannelAllowedForUser(
+        { sub: "a1", role: "ADMIN" },
+        "private-nearby-city-lahore",
+      ),
+    ).toBe(false);
+  });
+
   it("rejects unknown or malformed channel names", () => {
     expect(
       isChannelAllowedForUser({ sub: "u1", role: "CUSTOMER" }, "public-jobs"),

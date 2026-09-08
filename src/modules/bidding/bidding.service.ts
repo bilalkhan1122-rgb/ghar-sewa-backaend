@@ -25,6 +25,7 @@ import {
 import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { ProviderPresenceService } from "../provider/provider-presence.service";
 import { hasRole } from "src/common/roles";
 
 @Injectable()
@@ -35,6 +36,7 @@ export class BiddingService {
     private readonly notifications: NotificationsService,
     private readonly penalties: PenaltiesService,
     private readonly realtime: RealtimeService,
+    private readonly presence: ProviderPresenceService,
   ) {}
 
   // ─── Helper: get active booking for job ──────────────────────────────
@@ -321,6 +323,9 @@ export class BiddingService {
       relatedEntityType: "BOOKING",
       relatedEntityId: result.booking.id,
     });
+
+    // The provider is now engaged — tell the nearby map they are busy.
+    await this.presence.refreshAndPublishPresence(providerId);
 
     return result;
   }
@@ -797,6 +802,9 @@ export class BiddingService {
         relatedEntityId: bid.jobId,
       })),
     );
+
+    // The winning provider is now engaged — tell the nearby map they are busy.
+    await this.presence.refreshAndPublishPresence(bid.providerId);
 
     return result;
   }

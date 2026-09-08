@@ -8,6 +8,7 @@ import { WalletService } from "../wallet/wallet.service";
 import { RankingService } from "../ranking/ranking.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { SubcategoriesService } from "../categories/subcategories.service";
+import { ProviderPresenceService } from "../provider/provider-presence.service";
 import { BookingService } from "./booking.service";
 import {
   UserRole,
@@ -42,6 +43,7 @@ describe("BookingService — direct booking sub-types", () => {
   const ranking = { recalculateForProvider: jest.fn() };
   const realtime = { publish: jest.fn(), emitToUser: jest.fn() };
   const subcategories = { assertBelongsToCategory: jest.fn() };
+  const presence = { refreshAndPublishPresence: jest.fn() };
 
   const PROVIDER = {
     id: "prov1",
@@ -97,6 +99,7 @@ describe("BookingService — direct booking sub-types", () => {
         { provide: RankingService, useValue: ranking },
         { provide: RealtimeService, useValue: realtime },
         { provide: SubcategoriesService, useValue: subcategories },
+        { provide: ProviderPresenceService, useValue: presence },
       ],
     }).compile();
 

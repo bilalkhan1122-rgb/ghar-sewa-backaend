@@ -28,6 +28,7 @@ import { PenaltiesService } from "../penalties/penalties.service";
 import { WalletService } from "../wallet/wallet.service";
 import { RankingService } from "../ranking/ranking.service";
 import { RealtimeService } from "../realtime/realtime.service";
+import { ProviderPresenceService } from "../provider/provider-presence.service";
 import { hasRole } from "src/common/roles";
 
 @Injectable()
@@ -41,6 +42,7 @@ export class BookingService {
     private readonly ranking: RankingService,
     private readonly realtime: RealtimeService,
     private readonly subcategories: SubcategoriesService,
+    private readonly presence: ProviderPresenceService,
   ) {}
 
   // ─── Direct Booking ──────────────────────────────────────────────────
@@ -258,6 +260,9 @@ export class BookingService {
       providerId,
     });
 
+    // The provider is now engaged — tell the nearby map they are busy.
+    await this.presence.refreshAndPublishPresence(providerId);
+
     return result;
   }
 
@@ -399,6 +404,9 @@ export class BookingService {
       relatedEntityType: "BOOKING",
       relatedEntityId: bookingId,
     });
+
+    // The provider is now engaged — tell the nearby map they are busy.
+    await this.presence.refreshAndPublishPresence(booking.providerId);
 
     return result;
   }
@@ -855,6 +863,9 @@ export class BookingService {
           );
         });
 
+      // The booking is settled — the provider is free again.
+      await this.presence.refreshAndPublishPresence(booking.providerId);
+
       this.logger.log({
         message: "Dual-confirm payment completed",
         bookingId: booking.id,
@@ -965,6 +976,9 @@ export class BookingService {
       relatedEntityId: bookingId,
     });
 
+    // The provider is free again — refresh the nearby map.
+    await this.presence.refreshAndPublishPresence(booking.providerId);
+
     return result;
   }
 
@@ -1062,6 +1076,9 @@ export class BookingService {
       result.cancellation.id,
       reason || "Cancelled by provider before work started",
     );
+
+    // The provider is free again — refresh the nearby map.
+    await this.presence.refreshAndPublishPresence(providerId);
 
     return result.cancelledBooking;
   }

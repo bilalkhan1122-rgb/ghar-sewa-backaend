@@ -12,6 +12,9 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { PenaltiesModule } from "../penalties/penalties.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { WalletModule } from "../wallet/wallet.module";
+// ProviderPresenceService — force-closing a job frees its engaged providers,
+// which the nearby map must learn about in real time.
+import { ProviderModule } from "../provider/provider.module";
 
 @Module({
   imports: [
@@ -20,6 +23,7 @@ import { WalletModule } from "../wallet/wallet.module";
     PenaltiesModule,
     RealtimeModule,
     WalletModule,
+    ProviderModule,
   ],
   controllers: [JobsController, ProviderJobsController, AdminJobsController],
   providers: [JobsService, FileUploadService, AdminAuditService],

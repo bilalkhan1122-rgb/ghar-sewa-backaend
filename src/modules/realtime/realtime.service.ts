@@ -19,6 +19,8 @@ export const PUSHER_EVENTS = {
   JOB_URGENT_EXPIRED: "job.urgent.expired",
   JOB_URGENT_ACCEPTED: "job.urgent.accepted",
   ANALYTICS_UPDATED: "analytics.updated",
+  /** Provider went online/offline, moved, or changed busy state (nearby map). */
+  PROVIDER_PRESENCE_CHANGED: "provider.presence.changed",
   PAYMENT_PROCESSING: "payment.processing",
   PAYMENT_SUCCEEDED: "payment.succeeded",
   PAYMENT_FAILED: "payment.failed",
@@ -221,6 +223,45 @@ export class RealtimeService {
         timestamp: new Date(),
       },
     );
+  }
+
+  // ─── Provider presence (nearby map) ────────────────────────────────
+
+  /**
+   * provider.presence.changed → the provider's city nearby feed (+ their own
+   * provider channel so their own open screens stay in sync).
+   *
+   * The payload deliberately carries only coarse coordinates (rounded before
+   * this call) and no contact or profile data: the nearby feed is a customer
+   * screen, and the exact position of a provider is their own business until
+   * they engage.
+   */
+  publishProviderPresence(
+    cityId: string,
+    providerId: string,
+    payload: {
+      providerId: string;
+      cityId: string;
+      categoryIds: string[];
+      isOnline: boolean;
+      isBusy: boolean;
+      approximateLatitude: number | null;
+      approximateLongitude: number | null;
+      timestamp: Date;
+    },
+  ): Promise<boolean> {
+    return Promise.all([
+      this.publish(
+        PUSHER_CHANNELS.nearby(cityId),
+        PUSHER_EVENTS.PROVIDER_PRESENCE_CHANGED,
+        payload,
+      ),
+      this.publish(
+        PUSHER_CHANNELS.provider(providerId),
+        PUSHER_EVENTS.PROVIDER_PRESENCE_CHANGED,
+        payload,
+      ),
+    ]).then((results) => results.every(Boolean));
   }
 
   // ─── Payment events ─────────────────────────────────────────────────

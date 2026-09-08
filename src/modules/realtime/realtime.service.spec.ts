@@ -158,5 +158,35 @@ describe("RealtimeService (Pusher)", () => {
         expect.objectContaining({ reason: "job_completion_confirmed" }),
       );
     });
+
+    it("publishProviderPresence targets the city nearby feed and the provider's own channel", async () => {
+      service = new RealtimeService(configWith(FULL_CONFIG));
+      await service.publishProviderPresence("city-lahore", "p1", {
+        providerId: "p1",
+        cityId: "city-lahore",
+        categoryIds: ["cat-plumber"],
+        isOnline: true,
+        isBusy: false,
+        approximateLatitude: 31.52,
+        approximateLongitude: 74.36,
+        timestamp: new Date(),
+      });
+
+      expect(trigger).toHaveBeenNthCalledWith(
+        1,
+        "private-nearby-city-lahore",
+        PUSHER_EVENTS.PROVIDER_PRESENCE_CHANGED,
+        expect.objectContaining({
+          providerId: "p1",
+          approximateLatitude: 31.52,
+        }),
+      );
+      expect(trigger).toHaveBeenNthCalledWith(
+        2,
+        "private-provider-p1",
+        PUSHER_EVENTS.PROVIDER_PRESENCE_CHANGED,
+        expect.objectContaining({ providerId: "p1" }),
+      );
+    });
   });
 });

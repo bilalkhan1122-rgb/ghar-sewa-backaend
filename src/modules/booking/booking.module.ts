@@ -10,6 +10,9 @@ import { WalletModule } from "../wallet/wallet.module";
 import { RankingModule } from "../ranking/ranking.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { CategoriesModule } from "../categories/categories.module";
+// ProviderPresenceService — booking transitions flip a provider between
+// busy and free, which the nearby map must learn about in real time.
+import { ProviderModule } from "../provider/provider.module";
 
 @Module({
   imports: [
@@ -22,6 +25,7 @@ import { CategoriesModule } from "../categories/categories.module";
     // For SubcategoriesService — a direct booking creates a job, so it has
     // to validate a sub-type the same way posting one does.
     CategoriesModule,
+    ProviderModule,
   ],
   controllers: [
     CustomerBookingController,

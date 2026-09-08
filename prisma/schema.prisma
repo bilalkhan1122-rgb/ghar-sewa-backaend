@@ -47,6 +47,18 @@ enum ProviderRank {
   @@map("provider_rank")
 }
 
+/// Provider choice about how their busy state is decided (Nearby Online
+/// Providers). AUTO lets the platform derive busy from active bookings;
+/// BUSY / AVAILABLE are manual overrides for "appear busy now" / "appear
+/// free now", whichever happens first from the provider's point of view.
+enum ProviderBusyOverride {
+  AUTO
+  BUSY
+  AVAILABLE
+
+  @@map("provider_busy_override")
+}
+
 enum UserRole {
   CUSTOMER
   PROVIDER
@@ -676,6 +688,19 @@ model ProviderProfile {
   /// When they last went online — lets a stale switch be aged out later
   /// without another migration.
   lastOnlineAt DateTime?
+
+  /// Provider's live position, shared only while they are actually online
+  /// and only as coarse coordinates in the customer UI. The exact values
+  /// never leave the server except to the provider who owns them.
+  latitude         Float?
+  longitude        Float?
+  /// When the location above was last refreshed. A fix older than
+  /// LOCATION_TTL is treated as stale and the provider drops out of nearby
+  /// search until the app reports again.
+  locationUpdatedAt DateTime?
+
+  /// How busy is decided (see ProviderBusyOverride).
+  busyOverride ProviderBusyOverride @default(AUTO)
 
   categories    ProviderServiceCategory[]
   galleryImages GalleryImage[]

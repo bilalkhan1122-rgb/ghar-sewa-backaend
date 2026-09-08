@@ -18,6 +18,9 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { ApiTags, ApiConsumes, ApiBody, ApiOperation } from "@nestjs/swagger";
 import { ProviderService } from "./provider.service";
+import { ProviderPresenceService } from "./provider-presence.service";
+import { UpdateProviderLocationDto } from "./dtos/update-provider-location.dto";
+import { SetProviderBusyDto } from "./dtos/set-provider-busy.dto";
 import { GetUser } from "src/common/decorators/get-user.decorator";
 import { Public } from "src/common/decorators/public.decorator";
 import { Roles } from "src/common/decorators/roles.decorator";
@@ -30,7 +33,10 @@ import { PublicProvidersQueryDto } from "./dtos/public-providers-query.dto";
 @ApiTags("Provider")
 @Controller("provider")
 export class ProviderController {
-  constructor(private readonly providerService: ProviderService) {}
+  constructor(
+    private readonly providerService: ProviderService,
+    private readonly presence: ProviderPresenceService,
+  ) {}
 
   // ─── Profile Completion ──────────────────────────────────────────────
 
@@ -52,18 +58,46 @@ export class ProviderController {
   // ─── Update Profile ──────────────────────────────────────────────────
 
   @Patch("/profile/availability")
+  @Roles(UserRole.PROVIDER)
   @ApiOperation({ summary: "Go online or offline" })
   async setAvailability(
     @GetUser("sub") userId: string,
     @Body() dto: AvailabilityDto,
   ) {
-    return this.providerService.setOnlineStatus(userId, dto.isOnline);
+    return this.presence.setOnlineStatus(userId, dto.isOnline);
   }
 
   @Post("/profile/heartbeat")
+  @Roles(UserRole.PROVIDER)
   @ApiOperation({ summary: "Keep an online provider's presence fresh" })
   async heartbeat(@GetUser("sub") userId: string) {
-    return this.providerService.heartbeat(userId);
+    return this.presence.heartbeat(userId);
+  }
+
+  @Patch("/profile/location")
+  @Roles(UserRole.PROVIDER)
+  @ApiOperation({
+    summary:
+      "Report current location while online (only the provider's own position; must be online first)",
+  })
+  async updateLocation(
+    @GetUser("sub") userId: string,
+    @Body() dto: UpdateProviderLocationDto,
+  ) {
+    return this.presence.updateLocation(userId, dto);
+  }
+
+  @Patch("/profile/busy")
+  @Roles(UserRole.PROVIDER)
+  @ApiOperation({
+    summary:
+      "Set busy preference: AUTO (from active bookings) or force BUSY / AVAILABLE",
+  })
+  async setBusy(
+    @GetUser("sub") userId: string,
+    @Body() dto: SetProviderBusyDto,
+  ) {
+    return this.presence.setBusyOverride(userId, dto.busyOverride);
   }
 
   @Patch("/profile")

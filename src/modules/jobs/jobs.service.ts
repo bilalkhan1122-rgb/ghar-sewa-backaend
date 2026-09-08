@@ -25,6 +25,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PenaltiesService } from "../penalties/penalties.service";
 import { RealtimeService } from "../realtime/realtime.service";
 import { WalletService } from "../wallet/wallet.service";
+import { ProviderPresenceService } from "../provider/provider-presence.service";
 import { hasRole } from "src/common/roles";
 
 // Module 20: urgent jobs expire in 6 hours, normal jobs in 24. The expiry
@@ -44,6 +45,7 @@ export class JobsService {
     private readonly adminAudit: AdminAuditService,
     private readonly realtime: RealtimeService,
     private readonly wallet: WalletService,
+    private readonly presence: ProviderPresenceService,
   ) {}
 
   // ─── Helpers ─────────────────────────────────────────────────────────
@@ -1040,6 +1042,15 @@ export class JobsService {
       );
     }
 
+    // Who was engaged before the close — they are about to become free.
+    const engagedProviders = await this.prisma.booking.findMany({
+      where: {
+        jobId,
+        status: { in: [BookingStatus.ACCEPTED, BookingStatus.IN_PROGRESS] },
+      },
+      select: { providerId: true },
+    });
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const updatedJob = await tx.job.update({
         where: { id: jobId },
@@ -1091,6 +1102,16 @@ export class JobsService {
       jobId,
       reason,
     });
+
+    // Engaged providers are free again — refresh the nearby map for each.
+    const affectedProviders = [
+      ...new Set(engagedProviders.map((b) => b.providerId)),
+    ];
+    await Promise.all(
+      affectedProviders.map((providerId) =>
+        this.presence.refreshAndPublishPresence(providerId),
+      ),
+    );
 
     return updated;
   }

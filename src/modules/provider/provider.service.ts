@@ -22,31 +22,10 @@ import {
 } from "generated/prisma/client";
 import { VerificationService } from "../verification/verification.service";
 import { hasRole } from "src/common/roles";
-
-/**
- * How long a provider keeps counting as online after their last heartbeat.
- *
- * The switch on the provider dashboard records intent ("I am available"), not
- * presence — nothing used to clear it, so a provider who toggled on once and
- * closed the app showed a green dot to customers indefinitely. The app pings
- * `/provider/profile/heartbeat` every couple of minutes while it is open, and
- * anything older than this window is reported as offline.
- *
- * Comfortably longer than the client's ping interval, so one dropped request
- * on a bad connection does not blink the dot off.
- */
-const PRESENCE_TTL_MS = 5 * 60 * 1000;
-
-/**
- * What customers see. Requires both halves: the provider meant to be available,
- * and the app has checked in recently enough for that to still be true.
- */
-function isPresent(
-  profile: { isOnline: boolean; lastOnlineAt: Date | null } | null | undefined,
-): boolean {
-  if (!profile?.isOnline || !profile.lastOnlineAt) return false;
-  return Date.now() - profile.lastOnlineAt.getTime() < PRESENCE_TTL_MS;
-}
+// Presence freshness rules live next to the presence service that writes them
+// (ProviderPresenceService / provider-presence.config), so every reader — the
+// browse lists included — ages a stale online switch identically.
+import { isProviderPresent } from "./provider-presence.config";
 
 @Injectable()
 export class ProviderService {
@@ -650,7 +629,7 @@ export class ProviderService {
       hourlyRate: u.providerProfile?.hourlyRate ?? null,
       serviceLocation: u.providerProfile?.serviceLocation ?? null,
       serviceRadius: u.providerProfile?.serviceRadius ?? null,
-      isOnline: isPresent(u.providerProfile),
+      isOnline: isProviderPresent(u.providerProfile),
       city: u.city,
       rating: u.ratingSummary?.averageRating ?? 0,
       totalReviews: u.ratingSummary?.totalReviews ?? 0,
@@ -688,54 +667,6 @@ export class ProviderService {
         hasPrevious: page > 1,
       },
     };
-  }
-
-  /**
-   * Provider's own availability switch.
-   *
-   * Only stored and shown — it does not hide them from the job feed or stop
-   * them being booked. Going offline is a signal to customers ("probably will
-   * not answer right now"), not a change to what the platform will let them
-   * do, and conflating the two would silently cut a provider off from work
-   * they never meant to decline.
-   */
-  /**
-   * Keeps an already-online provider online.
-   *
-   * Deliberately cannot turn anyone on: it only refreshes the timestamp of a
-   * provider who has already flipped the switch themselves, so a background
-   * ping can never override a provider who chose to go offline.
-   */
-  async heartbeat(userId: string) {
-    const { count } = await this.prisma.providerProfile.updateMany({
-      where: { userId, isOnline: true },
-      data: { lastOnlineAt: new Date() },
-    });
-
-    return { isOnline: count > 0 };
-  }
-
-  async setOnlineStatus(userId: string, isOnline: boolean) {
-    const profile = await this.prisma.providerProfile.findUnique({
-      where: { userId },
-      select: { userId: true },
-    });
-    if (!profile) {
-      throw new NotFoundException(
-        "Complete your provider profile before going online",
-      );
-    }
-
-    const updated = await this.prisma.providerProfile.update({
-      where: { userId },
-      data: {
-        isOnline,
-        ...(isOnline ? { lastOnlineAt: new Date() } : {}),
-      },
-      select: { isOnline: true, lastOnlineAt: true },
-    });
-
-    return updated;
   }
 
   async getPublicProfile(providerId: string) {
@@ -784,7 +715,7 @@ export class ProviderService {
       id: user.id,
       fullName: user.fullName,
       profilePhoto: user.profilePhoto,
-      isOnline: isPresent(profile),
+      isOnline: isProviderPresent(profile),
       bio: profile.bio,
       hourlyRate: profile.hourlyRate,
       serviceLocation: profile.serviceLocation,
