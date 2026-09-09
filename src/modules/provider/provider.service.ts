@@ -203,6 +203,11 @@ export class ProviderService {
       // Provider-specific fields
       profile: profile
         ? {
+            // The availability switch and the manual busy preference, so the
+            // provider dashboard can restore both after a reload instead of
+            // snapping the toggle to "offline" and the picker back to AUTO.
+            isOnline: profile.isOnline,
+            busyOverride: profile.busyOverride,
             bio: profile.bio,
             hourlyRate: profile.hourlyRate,
             serviceLocation: profile.serviceLocation,
