@@ -2,18 +2,21 @@ import { BookingStatus, ProviderBusyOverride } from "generated/prisma/client";
 
 /**
  * How long an online flag stays trustworthy after the last heartbeat.
- * The provider app pings every couple of minutes while open; one dropped
- * request on a bad connection must not blink the dot off.
+ *
+ * The provider app keeps reporting from a background location service while
+ * the provider is online, even with the app minimised — but the OS throttles
+ * that hard (iOS especially, and aggressive Android OEMs), so the cadence can
+ * stretch to several minutes. This window has to be wide enough to ride
+ * through a few missed reports without blinking the provider off the map.
  */
-export const PRESENCE_TTL_MS = 5 * 60 * 1000;
+export const PRESENCE_TTL_MS = 15 * 60 * 1000;
 
 /**
- * How long a location fix stays usable for nearby search. The provider app
- * reports its current position periodically while online; a fix older than
- * this window means the provider has stopped reporting (or gone offline) and
- * they must drop out of "nearby" until a fresh fix arrives.
+ * How long a location fix stays usable for nearby search. Same reasoning as
+ * `PRESENCE_TTL_MS` — a background fix can be a few minutes stale and still be
+ * good enough for a ~1 km-rounded "who is near me" list.
  */
-export const LOCATION_TTL_MS = 5 * 60 * 1000;
+export const LOCATION_TTL_MS = 15 * 60 * 1000;
 
 /** Default and maximum radius a customer may search, in kilometres. */
 export const NEARBY_DEFAULT_RADIUS_KM = 5;
