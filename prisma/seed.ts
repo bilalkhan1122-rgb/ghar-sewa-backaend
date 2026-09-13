@@ -42,6 +42,11 @@ async function main() {
       update: {},
       create: { id: "city-rawalpindi", name: "Rawalpindi" },
     }),
+    prisma.city.upsert({
+      where: { id: "city-peshawar" },
+      update: {},
+      create: { id: "city-peshawar", name: "Peshawar" },
+    }),
   ]);
 
   console.log(`✅ Created ${cities.length} cities`);
