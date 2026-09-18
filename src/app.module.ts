@@ -9,6 +9,7 @@ import { CronModule } from "./modules/cron/cron.module";
 import { HealthModule } from "./modules/health/health.module";
 import { ProviderModule } from "./modules/provider/provider.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
+import { BannersModule } from "./modules/banners/banners.module";
 import { JobsModule } from "./modules/jobs/jobs.module";
 import { BiddingModule } from "./modules/bidding/bidding.module";
 import { BookingModule } from "./modules/booking/booking.module";
@@ -64,6 +65,7 @@ import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
     HealthModule,
     ProviderModule,
     CategoriesModule,
+    BannersModule,
     JobsModule,
     BiddingModule,
     BookingModule,

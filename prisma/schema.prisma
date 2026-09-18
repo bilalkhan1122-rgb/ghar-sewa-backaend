@@ -1538,3 +1538,31 @@ model PlatformSetting {
 
   @@map("platform_settings")
 }
+
+/**
+ * A promo card on the customer home slider (KAN-9). Admin-authored, so the
+ * app never ships hardcoded promotional copy — `isActive` is what "published"
+ * means; the public endpoint only ever returns active rows, and the app hides
+ * the whole slider when that list is empty rather than showing a stale card.
+ *
+ * `ctaTarget`/`accentColor` are plain validated strings, not Prisma enums —
+ * these are content choices an admin picks from a short list, not domain
+ * state, and a new option should not need a migration.
+ */
+model Banner {
+  id           String   @id @default(uuid())
+  title        String   @db.VarChar(120)
+  subtitle     String?  @db.VarChar(200)
+  ctaLabel     String?  @db.VarChar(40)
+  /// One of BANNER_TARGETS (src/modules/banners/banner-options.ts) or null for a non-tappable card.
+  ctaTarget    String?  @db.VarChar(30)
+  /// One of BANNER_ACCENTS (src/modules/banners/banner-options.ts).
+  accentColor  String   @default("primary") @db.VarChar(20)
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, displayOrder])
+  @@map("banners")
+}

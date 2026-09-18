@@ -49,6 +49,12 @@ export const ADMIN_MODULES = [
     actions: ["categories.manage"],
   },
   {
+    key: "banners",
+    label: "Home Banners",
+    view: "banners.view",
+    actions: ["banners.manage"],
+  },
+  {
     key: "verifications",
     label: "Verifications",
     view: "verification.view",
