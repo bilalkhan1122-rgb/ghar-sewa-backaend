@@ -152,13 +152,21 @@ describe("ProviderService — getCustomerProfileForProvider", () => {
     );
   });
 
-  it("shows only approved, undeleted reviews about the customer", async () => {
+  it("shows only approved, undeleted reviews the customer has given", async () => {
     prisma.booking.findFirst.mockResolvedValue({ id: "b1" });
 
     await service.getCustomerProfileForProvider("prov1", "cust1");
 
-    const { where } = prisma.review.findMany.mock.calls[0][0];
-    expect(where).toMatchObject({ revieweeId: "cust1", deletedAt: null });
-    expect(where.status).toBeDefined();
+    // A customer is never a reviewee here — only providers get reviewed —
+    // so both the rating stats and the review list are scoped to what this
+    // customer wrote, not what was written about them.
+    const wheres = prisma.review.findMany.mock.calls.map(
+      (c: [{ where: Record<string, unknown> }]) => c[0].where,
+    );
+    expect(wheres.length).toBeGreaterThan(0);
+    for (const where of wheres) {
+      expect(where).toMatchObject({ reviewerId: "cust1", deletedAt: null });
+      expect(where.status).toBeDefined();
+    }
   });
 });

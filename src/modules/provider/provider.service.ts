@@ -786,47 +786,72 @@ export class ProviderService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: customerId },
-      include: { city: true, ratingSummary: true },
+      include: { city: true },
     });
 
     if (!user || !hasRole(user, UserRole.CUSTOMER) || !user.isActive) {
       throw new NotFoundException("Customer not found");
     }
 
-    const [jobsPosted, completedWithYou, totalCompleted, cancelled, reviews] =
-      await Promise.all([
-        this.prisma.job.count({ where: { customerId } }),
-        this.prisma.booking.count({
-          where: { customerId, providerId, status: BookingStatus.COMPLETED },
-        }),
-        this.prisma.booking.count({
-          where: { customerId, status: BookingStatus.COMPLETED },
-        }),
-        this.prisma.booking.count({
-          where: { customerId, status: BookingStatus.CANCELLED },
-        }),
-        // What other providers said about working for them. The reviewer's
-        // name is the only thing a provider needs from the other side.
-        this.prisma.review.findMany({
-          where: {
-            revieweeId: customerId,
-            status: ReviewStatus.APPROVED,
-            deletedAt: null,
+    const [
+      jobsPosted,
+      completedWithYou,
+      totalCompleted,
+      cancelled,
+      givenRatings,
+      reviews,
+    ] = await Promise.all([
+      this.prisma.job.count({ where: { customerId } }),
+      this.prisma.booking.count({
+        where: { customerId, providerId, status: BookingStatus.COMPLETED },
+      }),
+      this.prisma.booking.count({
+        where: { customerId, status: BookingStatus.COMPLETED },
+      }),
+      this.prisma.booking.count({
+        where: { customerId, status: BookingStatus.CANCELLED },
+      }),
+      // A customer is never a reviewee here — only providers get reviewed —
+      // so these stats are of the ratings this customer has *given*, not
+      // received. There is no persisted summary for that (RatingSummary
+      // tracks reviews received, one row per user), so it comes straight off
+      // the customer's own reviews, the same way RatingSummary itself is
+      // recomputed after a review changes.
+      this.prisma.review.findMany({
+        where: {
+          reviewerId: customerId,
+          status: ReviewStatus.APPROVED,
+          deletedAt: null,
+        },
+        select: { rating: true },
+      }),
+      // The jobs this customer has reviewed. Showing the provider they
+      // reviewed (the reviewee) is what tells another provider anything —
+      // the reviewer on every row here is this same customer.
+      this.prisma.review.findMany({
+        where: {
+          reviewerId: customerId,
+          status: ReviewStatus.APPROVED,
+          deletedAt: null,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          rating: true,
+          reviewText: true,
+          createdAt: true,
+          reviewee: {
+            select: { id: true, fullName: true, profilePhoto: true },
           },
-          orderBy: { createdAt: "desc" },
-          take: 10,
-          select: {
-            id: true,
-            rating: true,
-            reviewText: true,
-            createdAt: true,
-            reviewer: {
-              select: { id: true, fullName: true, profilePhoto: true },
-            },
-            job: { select: { id: true, title: true } },
-          },
-        }),
-      ]);
+          job: { select: { id: true, title: true } },
+        },
+      }),
+    ]);
+
+    const totalReviews = givenRatings.length;
+    const countFor = (stars: number) =>
+      givenRatings.filter((r) => r.rating === stars).length;
 
     return {
       id: user.id,
@@ -836,14 +861,17 @@ export class ProviderService {
       address: user.address,
       city: user.city,
       memberSince: user.createdAt,
-      rating: user.ratingSummary?.averageRating ?? 0,
-      totalReviews: user.ratingSummary?.totalReviews ?? 0,
+      rating:
+        totalReviews > 0
+          ? givenRatings.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+          : 0,
+      totalReviews,
       ratingDistribution: {
-        fiveStar: user.ratingSummary?.fiveStarCount ?? 0,
-        fourStar: user.ratingSummary?.fourStarCount ?? 0,
-        threeStar: user.ratingSummary?.threeStarCount ?? 0,
-        twoStar: user.ratingSummary?.twoStarCount ?? 0,
-        oneStar: user.ratingSummary?.oneStarCount ?? 0,
+        fiveStar: countFor(5),
+        fourStar: countFor(4),
+        threeStar: countFor(3),
+        twoStar: countFor(2),
+        oneStar: countFor(1),
       },
       jobsPosted,
       jobsCompleted: totalCompleted,
