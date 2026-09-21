@@ -617,6 +617,12 @@ export class WalletService {
         }
 
         const shortId = booking.id.slice(0, 8);
+        // The customer never sees a booking id anywhere in the app — only
+        // the job's. Their wallet history quoted the booking's short id here,
+        // which happened to look like a job id and didn't match the one on
+        // the job detail screen (a different record entirely), reading as a
+        // mismatch on every single payment.
+        const customerFacingJobId = booking.jobId.slice(0, 8);
 
         // debit will throw BadRequestException("Insufficient wallet balance")
         // if the customer cannot cover the full amount — we catch that below.
@@ -629,7 +635,7 @@ export class WalletService {
             referenceType: "BOOKING",
             referenceId: booking.id,
             processingKey: `${paymentKey}:customer`,
-            description: `Payment for booking #${shortId}`,
+            description: `Payment for job #${customerFacingJobId}`,
           },
         );
 
