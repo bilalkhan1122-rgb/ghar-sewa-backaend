@@ -33,6 +33,7 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
     providerServiceCategory: { findMany: jest.fn() },
     user: { findUnique: jest.fn() },
     jobImage: { create: jest.fn() },
+    bid: { findMany: jest.fn() },
   };
 
   /** Prisma returns Decimal-like values for money columns. */
@@ -429,6 +430,7 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
     beforeEach(() => {
       prisma.job.findMany.mockResolvedValue([]);
       prisma.job.count.mockResolvedValue(0);
+      prisma.bid.findMany.mockResolvedValue([]);
     });
 
     /** The `select` the query asked for on the embedded booking. */
@@ -493,6 +495,68 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
           where: expect.objectContaining({ customerId: "c1" }),
         }),
       );
+    });
+  });
+
+  describe("listMyJobs — a provider's counter-offer on a direct booking", () => {
+    beforeEach(() => {
+      prisma.job.count.mockResolvedValue(1);
+    });
+
+    /**
+     * A direct booking sits PENDING until the provider answers. If they
+     * counter instead of accepting, that is recorded as a Bid at PENDING for
+     * the same job and provider — the same thing the job detail screen finds
+     * with activeProviderForJob + jobBids, done here for a whole page at once.
+     */
+    it("flags a job whose direct booking the provider has countered", async () => {
+      prisma.job.findMany.mockResolvedValue([
+        createdJob({
+          id: "job1",
+          bookings: [{ id: "b1", status: "PENDING", providerId: "prov1" }],
+        }),
+      ]);
+      prisma.bid.findMany.mockResolvedValue([{ jobId: "job1" }]);
+
+      const result = await service.listMyJobs("c1", { page: 1, limit: 10 });
+
+      expect(prisma.bid.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: "PENDING",
+            OR: [{ jobId: "job1", providerId: "prov1" }],
+          }),
+        }),
+      );
+      expect(result.data[0]).toMatchObject({ hasProviderCounterOffer: true });
+    });
+
+    it("does not flag a job whose booking is pending but has no counter", async () => {
+      prisma.job.findMany.mockResolvedValue([
+        createdJob({
+          id: "job1",
+          bookings: [{ id: "b1", status: "PENDING", providerId: "prov1" }],
+        }),
+      ]);
+      prisma.bid.findMany.mockResolvedValue([]);
+
+      const result = await service.listMyJobs("c1", { page: 1, limit: 10 });
+
+      expect(result.data[0]).toMatchObject({ hasProviderCounterOffer: false });
+    });
+
+    it("skips the bid lookup entirely when nothing is pending", async () => {
+      prisma.job.findMany.mockResolvedValue([
+        createdJob({
+          id: "job1",
+          bookings: [{ id: "b1", status: "ACCEPTED", providerId: "prov1" }],
+        }),
+      ]);
+
+      const result = await service.listMyJobs("c1", { page: 1, limit: 10 });
+
+      expect(prisma.bid.findMany).not.toHaveBeenCalled();
+      expect(result.data[0]).toMatchObject({ hasProviderCounterOffer: false });
     });
   });
   // ─── Sub-types within a category ───────────────────────────────────────

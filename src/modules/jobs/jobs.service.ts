@@ -15,6 +15,7 @@ import {
   Prisma,
   JobStatus,
   BookingStatus,
+  BidStatus,
   UserRole,
   UserStatus,
   VerificationStatus,
@@ -433,6 +434,7 @@ export class JobsService {
             select: {
               id: true,
               status: true,
+              providerId: true,
               totalAmount: true,
               completedAt: true,
               confirmedAt: true,
@@ -447,10 +449,49 @@ export class JobsService {
       this.prisma.job.count({ where }),
     ]);
 
+    // A direct booking sits PENDING until the provider answers. If the
+    // provider counters instead of accepting, that counter is recorded as a
+    // Bid (same jobId + providerId) at PENDING — the job detail screen finds
+    // it with two round trips per job (activeProviderForJob, then jobBids);
+    // the list does the equivalent in one extra query across the whole page.
+    const pendingDirect = jobs
+      .map((job) => ({ jobId: job.id, booking: job.bookings[0] }))
+      .filter(
+        (
+          x,
+        ): x is {
+          jobId: string;
+          booking: NonNullable<(typeof x)["booking"]>;
+        } => x.booking?.status === BookingStatus.PENDING,
+      );
+
+    const counteredJobIds = new Set<string>();
+    if (pendingDirect.length > 0) {
+      const counters = await this.prisma.bid.findMany({
+        where: {
+          status: BidStatus.PENDING,
+          OR: pendingDirect.map(({ jobId, booking }) => ({
+            jobId,
+            providerId: booking.providerId,
+          })),
+        },
+        select: { jobId: true },
+      });
+      for (const counter of counters) counteredJobIds.add(counter.jobId);
+    }
+
+    const data = jobs.map((job) => ({
+      ...job,
+      // Awaiting the customer's answer to a provider's counter-offer — the
+      // list otherwise shows the same "Pending" badge whether or not
+      // anything actually needs their attention.
+      hasProviderCounterOffer: counteredJobIds.has(job.id),
+    }));
+
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data: jobs,
+      data,
       meta: {
         total,
         page,
