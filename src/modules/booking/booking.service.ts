@@ -913,7 +913,15 @@ export class BookingService {
       throw new ForbiddenException("You can only cancel your own bookings");
     }
 
-    if (booking.status !== BookingStatus.ACCEPTED) {
+    // "Before work starts" is PENDING (the provider has not even answered
+    // yet) or ACCEPTED (they have, but haven't started) — not ACCEPTED
+    // alone. That excluded PENDING entirely, so a customer could never
+    // cancel a direct booking while it was still awaiting the provider,
+    // which is exactly when cancelling it is most likely to be wanted.
+    if (
+      booking.status !== BookingStatus.PENDING &&
+      booking.status !== BookingStatus.ACCEPTED
+    ) {
       throw new BadRequestException(
         "Bookings can only be cancelled before work starts",
       );

@@ -169,3 +169,118 @@ describe("BookingService — direct booking sub-types", () => {
     );
   });
 });
+
+/**
+ * "Before work starts" covers two statuses, not one: PENDING (the provider
+ * has not even answered a direct booking yet) and ACCEPTED (they have, but
+ * have not started). A check that only allowed ACCEPTED left a customer
+ * unable to cancel a direct booking while it was still awaiting the
+ * provider — precisely when cancelling it is most likely to be wanted.
+ */
+describe("BookingService — cancelBooking (customer, before work starts)", () => {
+  let service: BookingService;
+
+  const prisma = {
+    booking: { findUnique: jest.fn() },
+    $transaction: jest.fn(),
+  };
+
+  const tx = {
+    booking: { update: jest.fn() },
+    job: { update: jest.fn() },
+    cancellationRecord: { create: jest.fn() },
+    jobTimeline: { create: jest.fn() },
+  };
+
+  const logger = { log: jest.fn(), error: jest.fn(), warn: jest.fn() };
+  const notifications = { send: jest.fn(), sendToMany: jest.fn() };
+  const penalties = { assertProviderEligible: jest.fn() };
+  const wallet = { assertCanStartJob: jest.fn() };
+  const ranking = { recalculateForProvider: jest.fn() };
+  const realtime = { publish: jest.fn(), emitToUser: jest.fn() };
+  const subcategories = { assertBelongsToCategory: jest.fn() };
+  const presence = { refreshAndPublishPresence: jest.fn() };
+
+  const booking = (overrides: Record<string, unknown> = {}) => ({
+    id: "book1",
+    customerId: "cust1",
+    providerId: "prov1",
+    jobId: "job1",
+    status: "PENDING",
+    job: { id: "job1" },
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    tx.booking.update.mockResolvedValue({ id: "book1", status: "CANCELLED" });
+    tx.job.update.mockResolvedValue({});
+    tx.cancellationRecord.create.mockResolvedValue({});
+    tx.jobTimeline.create.mockResolvedValue({});
+    prisma.$transaction.mockImplementation((fn: (t: typeof tx) => unknown) =>
+      fn(tx),
+    );
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BookingService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: Logger, useValue: logger },
+        { provide: NotificationsService, useValue: notifications },
+        { provide: PenaltiesService, useValue: penalties },
+        { provide: WalletService, useValue: wallet },
+        { provide: RankingService, useValue: ranking },
+        { provide: RealtimeService, useValue: realtime },
+        { provide: SubcategoriesService, useValue: subcategories },
+        { provide: ProviderPresenceService, useValue: presence },
+      ],
+    }).compile();
+
+    service = module.get<BookingService>(BookingService);
+  });
+
+  it("lets the customer cancel while still waiting on the provider", async () => {
+    prisma.booking.findUnique.mockResolvedValue(booking({ status: "PENDING" }));
+
+    await expect(
+      service.cancelBooking("cust1", "book1"),
+    ).resolves.toBeDefined();
+    expect(tx.booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "CANCELLED" }),
+      }),
+    );
+  });
+
+  it("lets the customer cancel once the provider has accepted but not started", async () => {
+    prisma.booking.findUnique.mockResolvedValue(
+      booking({ status: "ACCEPTED" }),
+    );
+
+    await expect(
+      service.cancelBooking("cust1", "book1"),
+    ).resolves.toBeDefined();
+  });
+
+  it("refuses once work has actually started", async () => {
+    prisma.booking.findUnique.mockResolvedValue(
+      booking({ status: "IN_PROGRESS" }),
+    );
+
+    await expect(
+      service.cancelBooking("cust1", "book1"),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.booking.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a booking that is already settled", async () => {
+    prisma.booking.findUnique.mockResolvedValue(
+      booking({ status: "COMPLETED" }),
+    );
+
+    await expect(
+      service.cancelBooking("cust1", "book1"),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
