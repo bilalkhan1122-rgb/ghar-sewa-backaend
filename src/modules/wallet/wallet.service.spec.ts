@@ -185,3 +185,75 @@ describe("WalletService — settleDues", () => {
     expect(result.settled).toEqual(["bk-1", "bk-2"]);
   });
 });
+
+/**
+ * Payments made before the wording changed still say "booking #<booking id>",
+ * which matches nothing a customer can see — so the history is rewritten on the
+ * way out rather than left disagreeing with the job screen.
+ */
+describe("WalletService — customer transaction wording", () => {
+  let service: WalletService;
+
+  const prisma = { booking: { findMany: jest.fn() } };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WalletService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn() } },
+        { provide: NotificationsService, useValue: { send: jest.fn() } },
+        { provide: AdminAuditService, useValue: { record: jest.fn() } },
+        { provide: SettingsService, useValue: { getPaymentMode: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get<WalletService>(WalletService);
+
+    jest.spyOn(service as never, "ensureWallet").mockResolvedValue({ id: "w1" } as never);
+  });
+
+  const row = (over: Record<string, unknown>) => ({
+    id: "t1",
+    referenceType: "BOOKING",
+    referenceId: "6e1a28e0-aaaa",
+    description: "Payment for booking #6e1a28e0",
+    ...over,
+  });
+
+  it("quotes the job's id on an older payment", async () => {
+    jest
+      .spyOn(service as never, "queryTransactions")
+      .mockResolvedValue({ data: [row({})], meta: {} } as never);
+    prisma.booking.findMany.mockResolvedValue([{ id: "6e1a28e0-aaaa", jobId: "9f3c77d1-bbbb" }]);
+
+    const result = await service.listTransactions("c1", WalletType.CUSTOMER, {} as never);
+
+    expect(result.data[0].description).toBe("Payment for job #9f3c77d1");
+  });
+
+  it("leaves a provider's wallet text alone", async () => {
+    jest
+      .spyOn(service as never, "queryTransactions")
+      .mockResolvedValue({ data: [row({})], meta: {} } as never);
+
+    const result = await service.listTransactions("p1", WalletType.PROVIDER, {} as never);
+
+    expect(prisma.booking.findMany).not.toHaveBeenCalled();
+    expect(result.data[0].description).toBe("Payment for booking #6e1a28e0");
+  });
+
+  it("does not look anything up when no row needs rewriting", async () => {
+    jest
+      .spyOn(service as never, "queryTransactions")
+      .mockResolvedValue({
+        data: [row({ description: "Payment for job #9f3c77d1" })],
+        meta: {},
+      } as never);
+
+    await service.listTransactions("c1", WalletType.CUSTOMER, {} as never);
+
+    expect(prisma.booking.findMany).not.toHaveBeenCalled();
+  });
+});

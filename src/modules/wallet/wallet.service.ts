@@ -1544,7 +1544,48 @@ export class WalletService {
     query: WalletTransactionQueryDto,
   ) {
     const wallet = await this.ensureWallet(userId, type);
-    return this.queryTransactions({ walletId: wallet.id }, query);
+    const result = await this.queryTransactions({ walletId: wallet.id }, query);
+    if (type !== WalletType.CUSTOMER) return result;
+    return { ...result, data: await this.quoteJobIds(result.data) };
+  }
+
+  /**
+   * Payments recorded before the customer-facing wording changed still say
+   * "Payment for booking #<booking id>", which matches nothing the customer
+   * can see. Rewrites them on the way out, from the booking's job, so the
+   * whole history agrees with the job screen — not just payments made since.
+   */
+  private async quoteJobIds<
+    T extends {
+      referenceType: string | null;
+      referenceId: string | null;
+      description: string | null;
+    },
+  >(transactions: T[]): Promise<T[]> {
+    const legacy = /^Payment for booking #/;
+    const bookingIds = transactions
+      .filter(
+        (tx) =>
+          tx.referenceType === "BOOKING" &&
+          tx.referenceId &&
+          tx.description &&
+          legacy.test(tx.description),
+      )
+      .map((tx) => tx.referenceId as string);
+    if (bookingIds.length === 0) return transactions;
+
+    const bookings = await this.prisma.booking.findMany({
+      where: { id: { in: bookingIds } },
+      select: { id: true, jobId: true },
+    });
+    const jobIdByBooking = new Map(bookings.map((b) => [b.id, b.jobId]));
+
+    return transactions.map((tx) => {
+      const jobId = tx.referenceId ? jobIdByBooking.get(tx.referenceId) : undefined;
+      return jobId && tx.description && legacy.test(tx.description)
+        ? { ...tx, description: `Payment for job #${jobId.slice(0, 8)}` }
+        : tx;
+    });
   }
 
   async getTransaction(
