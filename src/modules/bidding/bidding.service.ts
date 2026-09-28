@@ -28,6 +28,22 @@ import { RealtimeService } from "../realtime/realtime.service";
 import { ProviderPresenceService } from "../provider/provider-presence.service";
 import { hasRole } from "src/common/roles";
 
+/** Great-circle distance in km, to one decimal — a figure, not a fix. */
+function distanceKmBetween(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const a =
+    Math.sin(rad(lat2 - lat1) / 2) ** 2 +
+    Math.cos(rad(lat1)) *
+      Math.cos(rad(lat2)) *
+      Math.sin(rad(lon2 - lon1) / 2) ** 2;
+  return Math.round(12742 * Math.asin(Math.sqrt(a)) * 10) / 10;
+}
+
 @Injectable()
 export class BiddingService {
   constructor(
@@ -597,6 +613,11 @@ export class BiddingService {
                   hourlyRate: true,
                   serviceLocation: true,
                   serviceRadius: true,
+                  // Read only to work out the distance below; stripped again
+                  // before the response, because a provider's exact position
+                  // is only ever shared with the provider themselves.
+                  latitude: true,
+                  longitude: true,
                   categories: {
                     include: { category: true },
                   },
@@ -611,8 +632,27 @@ export class BiddingService {
 
     const totalPages = Math.ceil(total / limit);
 
+    const data = bids.map((bid) => {
+      const profile = bid.provider.providerProfile;
+      const { latitude, longitude, ...publicProfile } = profile ?? {};
+      return {
+        ...bid,
+        provider: {
+          ...bid.provider,
+          providerProfile: profile ? publicProfile : null,
+        },
+        // How far the provider is from the job, so the customer can weigh a
+        // counter-offer by more than its price. Null when the provider has
+        // never shared a location.
+        distanceKm:
+          latitude != null && longitude != null
+            ? distanceKmBetween(latitude, longitude, job.latitude, job.longitude)
+            : null,
+      };
+    });
+
     return {
-      data: bids,
+      data,
       meta: {
         total,
         page,
