@@ -545,6 +545,24 @@ describe("JobsService (Module 20 — urgent jobs)", () => {
       expect(result.data[0]).toMatchObject({ hasProviderCounterOffer: false });
     });
 
+    it("flags an open-market job that has an offer waiting", async () => {
+      prisma.job.findMany.mockResolvedValue([
+        createdJob({ id: "job1", status: "PENDING", bookings: [] }),
+      ]);
+      prisma.bid.findMany.mockResolvedValue([{ jobId: "job1" }]);
+
+      const result = await service.listMyJobs("c1", { page: 1, limit: 10 });
+
+      expect(prisma.bid.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ jobId: { in: ["job1"] } }],
+          }),
+        }),
+      );
+      expect(result.data[0]).toMatchObject({ hasProviderCounterOffer: true });
+    });
+
     it("skips the bid lookup entirely when nothing is pending", async () => {
       prisma.job.findMany.mockResolvedValue([
         createdJob({

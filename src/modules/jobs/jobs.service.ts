@@ -465,15 +465,25 @@ export class JobsService {
         } => x.booking?.status === BookingStatus.PENDING,
       );
 
+    // A job posted to the open market has no booking until an offer is taken,
+    // so any offer still waiting on the customer counts — a provider quoting
+    // their own price is a counter-offer to the posted one.
+    const openJobIds = jobs
+      .filter((job) => job.status === JobStatus.PENDING && job.bookings.length === 0)
+      .map((job) => job.id);
+
     const counteredJobIds = new Set<string>();
-    if (pendingDirect.length > 0) {
+    if (pendingDirect.length > 0 || openJobIds.length > 0) {
       const counters = await this.prisma.bid.findMany({
         where: {
           status: BidStatus.PENDING,
-          OR: pendingDirect.map(({ jobId, booking }) => ({
-            jobId,
-            providerId: booking.providerId,
-          })),
+          OR: [
+            ...pendingDirect.map(({ jobId, booking }) => ({
+              jobId,
+              providerId: booking.providerId,
+            })),
+            ...(openJobIds.length > 0 ? [{ jobId: { in: openJobIds } }] : []),
+          ],
         },
         select: { jobId: true },
       });
